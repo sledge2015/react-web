@@ -2,7 +2,7 @@
 // 管理员相关的API服务
 
 import { apiClient, ApiResponse } from './api';
-import {authService, User} from './authService';
+import { User } from '../types/auth';
 
 export interface AdminUser extends User {
   isActive: boolean;

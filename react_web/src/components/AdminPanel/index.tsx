@@ -1,6 +1,7 @@
 // components/AdminPanel.tsx
 import React, { useState, useEffect } from 'react';
-import { useAuth, User } from '../../hooks/useAuth';
+import { useAuth } from '../../hooks/useAuth';
+import { User } from '../../types/auth';
 import './AdminPanel.css';
 
 interface SystemStats {
@@ -160,6 +161,7 @@ export const AdminPanel: React.FC = () => {
           avatar: '👨‍💼',
           createdAt: '2024-01-01T00:00:00.000Z',
           lastLogin: '2025-08-20T06:30:00.000Z',
+          isActive: true, // ✅ 添加缺失的isActive属性
         },
         {
           id: 'user-001',
@@ -169,6 +171,7 @@ export const AdminPanel: React.FC = () => {
           avatar: '👤',
           createdAt: '2024-01-15T00:00:00.000Z',
           lastLogin: '2025-08-19T14:22:00.000Z',
+          isActive: true, // ✅ 添加缺失的isActive属性
         },
         {
           id: 'user-002',
@@ -178,6 +181,7 @@ export const AdminPanel: React.FC = () => {
           avatar: '📈',
           createdAt: '2024-02-01T00:00:00.000Z',
           lastLogin: '2025-08-20T05:15:00.000Z',
+          isActive: true, // ✅ 添加缺失的isActive属性
         },
       ];
       setUsers(mockUsers);

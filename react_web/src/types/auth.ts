@@ -1,17 +1,40 @@
-// src/types/auth.ts
+// src/types/auth.ts - 统一类型定义
+export interface User {
+  id: string;
+  username: string;
+  email: string;
+  role: 'admin' | 'user';
+  avatar?: string;
+  createdAt: string;
+  lastLogin?: string;
+  isActive: boolean;
+}
 
-import type { LoginRequest as LoginReq, RegisterRequest as RegisterReq, User as AuthUser, AuthResponse as AuthResp } from '../services/authService';
+export interface LoginRequest {
+  username: string;
+  password: string;
+}
 
-export type LoginRequest = LoginReq;
-export type RegisterRequest = RegisterReq;
-export type User = AuthUser;
-export type AuthResponse = AuthResp;
+export interface RegisterRequest {
+  username: string;
+  email: string;
+  password: string;
+}
+
+export interface AuthResponse {
+  user: User;
+  token: string;
+  refreshToken?: string;
+  expiresIn: number;
+}
 
 export interface AuthContextType {
   user: User | null;
   token: string | null;
-  login: (credentials: LoginRequest) => Promise<boolean>;
+  isLoading: boolean;
+  login: (data: LoginRequest) => Promise<boolean>;
   register: (data: RegisterRequest) => Promise<boolean>;
   logout: () => void;
-  isLoading: boolean;
+  isAdmin: () => boolean;
+  hasPermission: (permission: string) => boolean;
 }
