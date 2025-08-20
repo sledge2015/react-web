@@ -1,0 +1,9 @@
+/* src/components/common/Loading.module.css */
+.loadingWrapper {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 100%;
+  font-size: 1.2rem;
+  color: #555;
+}

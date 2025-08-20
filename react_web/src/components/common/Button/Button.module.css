@@ -1,0 +1,50 @@
+/* src/common/Button.module.css */
+.button {
+  padding: 10px 20px;
+  font-size: 16px;
+  cursor: pointer;
+  background-color: #007bff;
+  color: white;
+  border: none;
+  border-radius: 4px;
+}
+
+.button:hover {
+  background-color: #0056b3;
+}
+.button {
+  padding: 8px 16px;
+  border-radius: 6px;
+  border: none;
+  cursor: pointer;
+}
+
+.primary {
+  background-color: #007bff;
+  color: white;
+}
+
+.secondary {
+  background-color: #6c757d;
+  color: white;
+}
+
+.danger {
+  background-color: #dc3545;
+  color: white;
+}
+
+.small {
+  font-size: 12px;
+  padding: 4px 8px;
+}
+
+.medium {
+  font-size: 14px;
+  padding: 6px 12px;
+}
+
+.large {
+  font-size: 16px;
+  padding: 10px 20px;
+}

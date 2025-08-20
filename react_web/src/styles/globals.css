@@ -1,0 +1,33 @@
+/* src/styles/globals.css */
+
+/* CSS Reset（简版） */
+* { box-sizing: border-box; }
+html, body, #root { height: 100%; }
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue',
+               Arial, 'Noto Sans', 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol',
+               'Noto Color Emoji', sans-serif;
+  color: #222;
+  background: #fafafa;
+}
+
+/* 链接/按钮的默认可访问性样式 */
+a { color: inherit; text-decoration: none; }
+button { cursor: pointer; }
+
+/* 全局变量（按需扩展） */
+:root{
+  --primary: #0d6efd;
+  --secondary: #6c757d;
+  --danger: #dc3545;
+  --border: #e5e7eb;
+  --radius: 8px;
+}
+
+/* 通用容器类（可选） */
+.container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 16px;
+}
