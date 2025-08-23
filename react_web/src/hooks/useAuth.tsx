@@ -324,7 +324,10 @@ export class APIClient {
 
   static async request(endpoint: string, options: RequestInit = {}) {
     const token = TokenStorage.getToken();
+    console.log('Requesting endpoint:', endpoint);
+    console.log('Using token:', token ? 'Available' : 'Not available');
 
+    // 配置请求的header
     const config: RequestInit = {
       ...options,
       headers: {
@@ -335,15 +338,25 @@ export class APIClient {
       credentials: 'include',
     };
 
+    console.log('Request config:', config);  // 打印请求配置
+
     try {
+      console.log(`Making API request to ${this.baseURL}${endpoint}`);
+
       const response = await fetch(`${this.baseURL}${endpoint}`, config);
+
+      console.log('Response received:', response);  // 打印响应对象
 
       // 如果token过期，尝试刷新
       if (response.status === 401) {
+        console.log('Token expired, attempting to refresh...');
         const refreshResult = await AuthAPI.refreshToken();
+        console.log('Refresh result:', refreshResult);
+
         if (refreshResult) {
           TokenStorage.saveToken(refreshResult.token);
           TokenStorage.saveUser(refreshResult.user);
+          console.log('Token refreshed successfully');
 
           // 重试原始请求
           config.headers = {
@@ -351,9 +364,13 @@ export class APIClient {
             'Authorization': `Bearer ${refreshResult.token}`,
           };
 
-          return fetch(`${this.baseURL}${endpoint}`, config);
+          console.log('Retrying original request with new token...');
+          const retryResponse = await fetch(`${this.baseURL}${endpoint}`, config);
+          console.log('Retry response received:', retryResponse);
+          return retryResponse.json();
         } else {
           // 刷新失败，重定向到登录页面
+          console.error('Token refresh failed, redirecting to login...');
           TokenStorage.clear();
           window.location.reload();
           throw new Error('认证过期，请重新登录');
@@ -362,21 +379,36 @@ export class APIClient {
 
       if (!response.ok) {
         const error = await response.json();
+        console.error('API error response:', error);
         throw new Error(error.message || `HTTP error! status: ${response.status}`);
       }
 
-      return response.json();
+      const responseData = await response.json();
+      console.log('APIClient-》request-> API response data:', responseData);  // 打印响应数据
+
+      return responseData;
     } catch (error) {
       console.error('API请求失败:', error);
-      throw error;
+      throw error; // 重新抛出错误，以便外部可以处理
     }
   }
 
-  static get(endpoint: string) {
-    return this.request(endpoint, { method: 'GET' });
+  static get(endpoint: string, data?: Record<string, any>) {
+    // 如果有 data，就拼接 query string
+    const url = data
+      ? `${endpoint}?${new URLSearchParams(data).toString()}`
+      : endpoint;
+
+    // 打印最终的请求URL和查询参数
+    console.log('GET Request URL:', url);
+    console.log('Request parameters:', data);
+
+    return this.request(url, {
+      method: 'GET',
+    });
   }
 
-  static post(endpoint: string, data: any) {
+  static post(endpoint: string, data?: any) {
     return this.request(endpoint, {
       method: 'POST',
       body: JSON.stringify(data),

@@ -2,36 +2,6 @@
 import { apiClient, ApiResponse } from './api';
 import { User, LoginRequest, RegisterRequest, AuthResponse } from '../types/auth';
 
-// 内置账户配置
-const FALLBACK_ACCOUNTS = {
-  admin: {
-    username: 'admin',
-    password: 'admin123',
-    user: {
-      id: 'admin-001',
-      username: 'admin',
-      email: 'admin@stockmanager.com',
-      role: 'admin' as const,
-      avatar: '👨‍💼',
-      createdAt: '2024-01-01T00:00:00.000Z',
-      isActive: true,
-    }
-  },
-  demo: {
-    username: 'demo',
-    password: 'demo123',
-    user: {
-      id: 'user-001',
-      username: 'demo',
-      email: 'demo@stockmanager.com',
-      role: 'user' as const,
-      avatar: '👤',
-      createdAt: '2024-01-01T00:00:00.000Z',
-      isActive: true,
-    }
-  }
-};
-
 class AuthService {
   private readonly TOKEN_KEY = 'auth_token';
   private readonly USER_KEY = 'user_data';
@@ -55,34 +25,9 @@ class AuthService {
     } catch (apiError) {
       console.warn('⚠️ API login failed, trying fallback accounts:', apiError);
 
-      // 2. API失败时使用内置账户
-      const fallbackResult = this.tryFallbackLogin(credentials);
-      if (fallbackResult) {
-        console.log('✅ Fallback login successful');
-        return fallbackResult;
-      }
-
       // 3. 都失败时抛出错误
       throw new Error('用户名或密码错误');
     }
-  }
-
-  // 内置账户登录
-  private tryFallbackLogin(credentials: LoginRequest): AuthResponse | null {
-    const account = Object.values(FALLBACK_ACCOUNTS).find(
-      acc => acc.username === credentials.username && acc.password === credentials.password
-    );
-
-    if (!account) return null;
-
-    const authData: AuthResponse = {
-      user: { ...account.user, lastLogin: new Date().toISOString() },
-      token: `fallback_${account.user.role}_${Date.now()}`,
-      expiresIn: 86400
-    };
-
-    this.saveAuthData(authData);
-    return authData;
   }
 
   // 注册

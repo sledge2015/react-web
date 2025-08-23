@@ -1,6 +1,6 @@
 // services/stockService.ts
 // 股票相关的API服务
-
+import { APIClient } from '../hooks/useAuth';
 import { apiClient, ApiResponse } from './api';
 
 export interface Stock {
