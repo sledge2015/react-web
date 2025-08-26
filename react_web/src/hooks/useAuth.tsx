@@ -77,27 +77,27 @@ class TokenStorage {
 class AuthAPI {
   private static baseURL = process.env.REACT_APP_API_URL || 'http://localhost:3001/api';
 
-  static async validateToken(token: string): Promise<User | null> {
-    try {
-      const response = await fetch(`${this.baseURL}/auth/validate`, {
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        credentials: 'include',
-      });
+    static async validateToken(token: string): Promise<User | null> {
+      try {
+        // 🔑 这是JWT验证的关键请求
+        const response = await fetch(`${this.baseURL}/auth/me`, {
+          method: 'GET',
+          headers: {
+            'Authorization': `Bearer ${token}`, // JWT令牌
+            'Content-Type': 'application/json',
+          },
+        });
 
-      if (response.ok) {
-        const data = await response.json();
-        return data.user;
+        if (response.ok) {
+          const data = await response.json();
+          return data.user || data; // 适应后端返回格式
+        }
+        return null;
+      } catch (error) {
+        console.error('Token验证失败:', error);
+        return null;
       }
-      return null;
-    } catch (error) {
-      console.error('Token验证失败:', error);
-      return null;
     }
-  }
 
   static async logout(): Promise<void> {
     const token = TokenStorage.getToken();

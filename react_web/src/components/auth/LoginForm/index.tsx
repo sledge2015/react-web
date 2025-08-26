@@ -1,5 +1,5 @@
-// components/auth/LoginForm.tsx - 真实API版本
-import React, { useState, useEffect } from 'react';
+// components/auth/LoginForm/index.tsx - 修复版本
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   Form,
   Input,
@@ -28,87 +28,229 @@ interface LoginFormProps {
 }
 
 interface LoginFormData {
-  account: string; // 支持用户名或邮箱
+  account: string;
   password: string;
   remember: boolean;
 }
 
+interface LoginResponse {
+  success: boolean;
+  user?: any;
+  token?: string;
+  token_type?: string;
+  message?: string;
+}
+
+interface BackendLoginRequest {
+  username: string;
+  password: string;
+  remember: boolean;
+}
+
+interface BackendLoginResponse {
+  user: any;
+  token: string;
+  token_type?: string;
+  message?: string;
+}
+
+interface BackendErrorResponse {
+  detail?: string;
+  message?: string;
+}
+
+// 自动登录检查结果类型
+interface AutoLoginResult {
+  shouldAutoLogin: boolean; // 是否应该尝试自动登录
+  loginData?: LoginResponse; // 自动登录结果
+  rememberedAccount?: string | null; // 记住的账户名
+}
+
 // API 服务
 class AuthAPI {
-  private static baseURL = process.env.REACT_APP_API_URL || 'http://localhost:3001/api';
+  private static baseURL = process.env.REACT_APP_API_URL || 'http://localhost:8000/api/v1';
 
-  static async login(data: LoginFormData) {
-    const response = await fetch(`${this.baseURL}/auth/login`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      credentials: 'include', // 支持cookie
-      body: JSON.stringify({
-        account: data.account,
+  static async login(data: LoginFormData): Promise<LoginResponse> {
+    try {
+      console.log('🔐 发起登录请求:', { username: data.account, remember: data.remember });
+
+      const requestBody: BackendLoginRequest = {
+        username: data.account,
         password: data.password,
         remember: data.remember
-      }),
-    });
+      };
 
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.message || `HTTP error! status: ${response.status}`);
+      const response = await fetch(`${this.baseURL}/auth/login`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include',
+        body: JSON.stringify(requestBody),
+      });
+
+      console.log('📥 登录响应状态:', response.status, response.statusText);
+
+      if (!response.ok) {
+        let errorMessage = `登录失败 (${response.status})`;
+
+        try {
+          const errorData: BackendErrorResponse = await response.json();
+          errorMessage = errorData.detail || errorData.message || errorMessage;
+          console.error('❌ 登录错误详情:', errorData);
+        } catch (parseError) {
+          console.warn('⚠️ 无法解析错误响应:', parseError);
+        }
+
+        throw new Error(errorMessage);
+      }
+
+      const result: BackendLoginResponse = await response.json();
+      console.log('✅ 登录成功响应:', result);
+
+      return {
+        success: true,
+        user: result.user,
+        token: result.token,
+        token_type: result.token_type || 'bearer',
+        message: result.message || '登录成功'
+      };
+
+    } catch (error: any) {
+      console.error('💥 AuthAPI.login 异常:', error);
+
+      if (error.name === 'TypeError' && error.message.includes('fetch')) {
+        throw new Error('网络连接失败，请检查网络连接');
+      }
+
+      throw error;
     }
-
-    return response.json();
   }
 
-  static async checkAutoLogin() {
+  // 修复：改进自动登录检查逻辑
+  static async checkAutoLogin(): Promise<AutoLoginResult> {
+    const savedToken = StorageUtil.getToken();
+    const savedUser = StorageUtil.getUser();
+    const rememberedAccount = StorageUtil.getRememberedAccount();
+
+    // 如果没有保存的token，说明不需要自动登录
+    if (!savedToken) {
+      console.log('ℹ️ 没有保存的token，跳过自动登录');
+      return {
+        shouldAutoLogin: false,
+        rememberedAccount: rememberedAccount || undefined
+      };
+    }
+
+    // 有token但没有用户信息，清除无效token
+    if (!savedUser) {
+      console.log('⚠️ 有token但无用户信息，清除无效token');
+      StorageUtil.clearToken();
+      return {
+        shouldAutoLogin: false,
+        rememberedAccount: rememberedAccount || undefined
+      };
+    }
+
     try {
+      console.log('🔍 验证保存的token有效性...');
+
       const response = await fetch(`${this.baseURL}/auth/me`, {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
+          'Authorization': `Bearer ${savedToken}`
         },
         credentials: 'include',
       });
 
       if (response.ok) {
-        return response.json();
+        const result = await response.json();
+        console.log('✅ Token验证成功，自动登录成功');
+
+        return {
+          shouldAutoLogin: true,
+          loginData: {
+            success: true,
+            user: result.user || savedUser,
+            token: savedToken,
+            token_type: 'bearer',
+            message: '自动登录成功'
+          },
+          rememberedAccount: rememberedAccount || undefined
+        };
+      } else {
+        console.log('⚠️ Token已过期，清除本地存储');
+        StorageUtil.clearToken();
+        StorageUtil.clearUser();
+
+        return {
+          shouldAutoLogin: false,
+          rememberedAccount: rememberedAccount || undefined
+        };
       }
-      return null;
     } catch (error) {
-      return null;
+      console.warn('⚠️ 自动登录验证失败:', error);
+      // 网络错误时不清除token，下次可能会恢复
+      return {
+        shouldAutoLogin: false,
+        rememberedAccount: rememberedAccount || undefined
+      };
     }
-  }
-
-  static async logout() {
-    const response = await fetch(`${this.baseURL}/auth/logout`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      credentials: 'include',
-    });
-
-    if (!response.ok) {
-      throw new Error('退出登录失败');
-    }
-
-    return response.json();
   }
 }
 
-// 本地存储工具
+// 修复：改进本地存储工具
 class StorageUtil {
-  private static REMEMBER_KEY = 'stock_app_remember_account';
+  private static TOKEN_KEY = 'stock_app_token';
+  private static USER_KEY = 'stock_app_user';
+  private static REMEMBERED_ACCOUNT_KEY = 'stock_app_remembered_account'; // 新增：专门存储记住的账户名
 
-  static saveRememberAccount(account: string) {
-    localStorage.setItem(this.REMEMBER_KEY, account);
+  // Token相关方法
+  static saveToken(token: string): void {
+    localStorage.setItem(this.TOKEN_KEY, token);
   }
 
-  static getRememberAccount(): string {
-    return localStorage.getItem(this.REMEMBER_KEY) || '';
+  static getToken(): string | null {
+    return localStorage.getItem(this.TOKEN_KEY);
   }
 
-  static clearRememberAccount() {
-    localStorage.removeItem(this.REMEMBER_KEY);
+  static clearToken(): void {
+    localStorage.removeItem(this.TOKEN_KEY);
+  }
+
+  // 用户信息相关方法
+  static saveUser(user: any): void {
+    localStorage.setItem(this.USER_KEY, JSON.stringify(user));
+  }
+
+  static getUser(): any {
+    const user = localStorage.getItem(this.USER_KEY);
+    return user ? JSON.parse(user) : null;
+  }
+
+  static clearUser(): void {
+    localStorage.removeItem(this.USER_KEY);
+  }
+
+  // 新增：记住账户名的方法
+  static saveRememberedAccount(account: string): void {
+    localStorage.setItem(this.REMEMBERED_ACCOUNT_KEY, account);
+  }
+
+  static getRememberedAccount(): string | null {
+    return localStorage.getItem(this.REMEMBERED_ACCOUNT_KEY);
+  }
+
+  static clearRememberedAccount(): void {
+    localStorage.removeItem(this.REMEMBERED_ACCOUNT_KEY);
+  }
+
+  // 新增：清除所有存储
+  static clearAll(): void {
+    this.clearToken();
+    this.clearUser();
+    this.clearRememberedAccount();
   }
 }
 
@@ -118,85 +260,103 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onSwitchToRegister }) => {
   const [form] = Form.useForm();
   const { login: authLogin } = useAuth();
 
-  // 检查自动登录
-  useEffect(() => {
-    checkAutoLogin();
-    loadRememberedAccount();
-  }, []);
-
-  const checkAutoLogin = async () => {
+  // 修复：改进自动登录检查
+  const checkAutoLogin = useCallback(async () => {
     try {
       setAutoLoginChecking(true);
-      const userData = await AuthAPI.checkAutoLogin();
+      const result = await AuthAPI.checkAutoLogin();
 
-      if (userData && userData.user) {
-        // 自动登录成功
-        authLogin(userData.user, userData.token);
+      // 处理自动登录
+      if (result.shouldAutoLogin && result.loginData) {
+        console.log('🎉 执行自动登录');
+        authLogin(result.loginData.user!, result.loginData.token!);
         message.success('欢迎回来！');
-        return;
       }
+
+      // 处理记住的账户名
+      if (result.rememberedAccount) {
+        console.log('📝 填充记住的账户名');
+        form.setFieldsValue({
+          account: result.rememberedAccount,
+          remember: true
+        });
+      }
+
     } catch (error) {
-      console.log('自动登录检查失败:', error);
+      console.error('💥 自动登录检查异常:', error);
+      message.error('初始化失败，请刷新页面重试');
     } finally {
       setAutoLoginChecking(false);
     }
-  };
+  }, [authLogin, form]);
 
-  const loadRememberedAccount = () => {
-    const rememberedAccount = StorageUtil.getRememberAccount();
-    if (rememberedAccount) {
-      form.setFieldsValue({
-        account: rememberedAccount,
-        remember: true
-      });
-    }
-  };
+  // 初始化
+  useEffect(() => {
+    checkAutoLogin();
+  }, [checkAutoLogin]);
 
   const handleLogin = async (values: LoginFormData) => {
     setLoading(true);
     try {
-      // 调用真实API
+      console.log('🚀 开始登录流程:', { account: values.account, remember: values.remember });
+
       const response = await AuthAPI.login(values);
 
-      if (response.success) {
-        // 登录成功
-        message.success('登录成功！');
+      if (response.success && response.user && response.token) {
+        message.success(response.message || '登录成功！');
 
-        // 处理记住登录
+        // 修复：处理记住登录和记住账户
         if (values.remember) {
-          StorageUtil.saveRememberAccount(values.account);
+          // 记住登录：保存token和用户信息（用于自动登录）
+          StorageUtil.saveToken(response.token);
+          StorageUtil.saveUser(response.user);
+          // 记住账户：保存账户名（用于下次填充表单）
+          StorageUtil.saveRememberedAccount(values.account);
+          console.log('💾 已保存登录信息和账户名');
         } else {
-          StorageUtil.clearRememberAccount();
+          // 不记住登录：清除所有本地存储
+          StorageUtil.clearAll();
+          console.log('🧹 已清除所有本地存储');
         }
 
         // 更新认证状态
+        console.log('🔄 更新认证状态...');
         authLogin(response.user, response.token);
 
       } else {
-        throw new Error(response.message || '登录失败');
+        const errorMsg = response.message || '登录失败，请重试';
+        throw new Error(errorMsg);
       }
 
     } catch (error: any) {
-      console.error('登录错误:', error);
+      console.error('💥 登录过程异常:', error);
 
       // 处理不同类型的错误
-      if (error.message.includes('网络')) {
-        message.error('网络连接失败，请检查网络连接');
-      } else if (error.message.includes('用户名') || error.message.includes('密码')) {
-        message.error('用户名或密码错误');
-      } else if (error.message.includes('账户被锁定')) {
-        message.error('账户已被锁定，请联系管理员');
-      } else {
-        message.error(error.message || '登录失败，请重试');
+      let errorMessage = '登录失败，请重试';
+
+      if (error.message) {
+        if (error.message.includes('网络')) {
+          errorMessage = '网络连接失败，请检查网络连接';
+        } else if (error.message.includes('用户名') || error.message.includes('密码') || error.message.includes('Incorrect')) {
+          errorMessage = '用户名或密码错误';
+        } else if (error.message.includes('账户被锁定') || error.message.includes('Inactive')) {
+          errorMessage = '账户已被锁定，请联系管理员';
+        } else if (error.message.includes('422')) {
+          errorMessage = '请求参数有误，请检查用户名和密码格式';
+        } else {
+          errorMessage = error.message;
+        }
       }
+
+      message.error(errorMessage);
     } finally {
       setLoading(false);
     }
   };
 
-  const validateAccount = (rule: any, value: string) => {
+  const validateAccount = (_rule: any, value: string): Promise<void> => {
     if (!value) {
-      return Promise.reject('请输入用户名或邮箱');
+      return Promise.reject(new Error('请输入用户名或邮箱'));
     }
 
     // 简单的邮箱格式检查
@@ -204,7 +364,7 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onSwitchToRegister }) => {
     const isUsername = /^[a-zA-Z0-9_]{3,20}$/.test(value);
 
     if (!isEmail && !isUsername) {
-      return Promise.reject('请输入有效的用户名（3-20位字母数字下划线）或邮箱地址');
+      return Promise.reject(new Error('请输入有效的用户名（3-20位字母数字下划线）或邮箱地址'));
     }
 
     return Promise.resolve();
@@ -222,7 +382,7 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onSwitchToRegister }) => {
       }}>
         <Card style={{ textAlign: 'center', padding: '40px' }}>
           <div style={{ fontSize: '24px', marginBottom: '16px' }}>📈</div>
-          <Text>正在检查登录状态...</Text>
+          <Text>正在初始化...</Text>
         </Card>
       </div>
     );
@@ -262,10 +422,10 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onSwitchToRegister }) => {
                 📈
               </div>
               <Title level={2} style={{ margin: 0, color: '#1f2937' }}>
-                美股投资管理系统
+                投资管理系统
               </Title>
               <Text type="secondary" style={{ fontSize: '14px' }}>
-                欢迎使用专业的美股投资分析平台
+                欢迎使用专业的投资分析平台
               </Text>
             </div>
 
@@ -384,19 +544,6 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onSwitchToRegister }) => {
                 立即注册
               </Button>
             </div>
-
-            {/* API 连接状态提示 */}
-            <div style={{
-              marginTop: '24px',
-              padding: '12px',
-              background: '#e6f7ff',
-              borderRadius: '6px',
-              border: '1px solid #91d5ff'
-            }}>
-              <Text style={{ fontSize: '12px', color: '#1890ff' }}>
-                🔗 API地址: {process.env.REACT_APP_API_URL || 'http://localhost:3001/api'}
-              </Text>
-            </div>
           </Card>
         </Col>
       </Row>
@@ -404,6 +551,4 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onSwitchToRegister }) => {
   );
 };
 
-// 导出 AuthAPI 供其他组件使用
-export { AuthAPI };
 export default LoginForm;

@@ -1,4 +1,4 @@
-// src/components/AdminPanel/index.tsx - 新风格版本
+// src/components/AdminPanel/index.tsx - 语法修复版本
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   Card,
@@ -107,9 +107,14 @@ interface AdminUser extends User {
   lastLoginIp?: string;
 }
 
-const AdminPanel: React.FC = () => {
+interface AdminPanelProps {
+  activeTab?: string;
+  onRefresh?: () => void;
+}
+
+const AdminPanel: React.FC<AdminPanelProps> = ({ activeTab, onRefresh }) => {
   const { user, hasPermission } = useAuth();
-  const [activeTab, setActiveTab] = useState('overview');
+  const [currentTab, setCurrentTab] = useState('overview');
   const [loading, setLoading] = useState(true);
 
   // 数据状态
@@ -148,6 +153,20 @@ const AdminPanel: React.FC = () => {
   const [form] = Form.useForm();
   const [configForm] = Form.useForm();
 
+  // 根据外部传入的activeTab设置内部状态
+  useEffect(() => {
+    if (activeTab) {
+      const tabMap: Record<string, string> = {
+        'admin': 'overview',
+        'admin-overview': 'overview',
+        'admin-users': 'users',
+        'admin-system': 'system',
+        'admin-logs': 'logs'
+      };
+      setCurrentTab(tabMap[activeTab] || 'overview');
+    }
+  }, [activeTab]);
+
   // 获取系统统计
   const fetchStats = useCallback(async () => {
     try {
@@ -174,44 +193,28 @@ const AdminPanel: React.FC = () => {
 
   // 获取用户列表
   const fetchUsers = useCallback(async (page: number = 1, search?: string) => {
-    // 1. 权限检查，没有权限就直接返回
-    console.log('fetchUsers triggered', page);
     if (!hasPermission('user.read')) {
       console.log('No permission to read users');
       return;
     }
 
     try {
-      // 2. 设置 loading 状态，通常用来显示 spinner
       setUsersLoading(true);
-      console.log('Loading users...');
-
-      // 3. 构造请求参数
       const params: any = { page, limit: usersPagination.pageSize };
       if (search || userFilters.search) {
         params.search = search || userFilters.search;
       }
-      console.log('fetchUsers-》Request params:', params);  // 打印请求参数
 
-      // 4. 调用 APIClient 封装的 GET 方法
       const response = await APIClient.get('/admin/users', params);
 
-      console.log('fetchUsers-》API response:', response);  // 打印API响应
-
-      // 5. 如果后端返回成功
       if (response.success) {
-        // 保存用户列表
         setUsers(response.users || []);
-        // 更新分页数据
         setUsersPagination(prev => ({
           ...prev,
           current: response.page || page,
           total: response.total || 0,
-          perPage: response.per_page || 10 // 每页数据条数，默认 10
+          perPage: response.per_page || 10
         }));
-        console.log('fetchUsers-》 Users updated:', response.users);
-      } else {
-        console.error('fetchUsers-》API error: Response success is false', response);
       }
     } catch (error) {
       console.error('获取用户列表失败:', error);
@@ -256,7 +259,6 @@ const AdminPanel: React.FC = () => {
         },
       ];
 
-      // 过滤模拟数据
       const filtered = search
         ? mockUsers.filter(user =>
             user.username.toLowerCase().includes(search.toLowerCase()) ||
@@ -264,15 +266,12 @@ const AdminPanel: React.FC = () => {
           )
         : mockUsers;
 
-      console.log('Filtered users:', filtered); // 打印过滤后的用户数据
       setUsers(filtered);
       setUsersPagination(prev => ({ ...prev, total: filtered.length }));
     } finally {
-      setUsersLoading(false); // 6. 请求完成，关闭 loading
-      console.log('Finished loading users');
+      setUsersLoading(false);
     }
   }, [hasPermission, usersPagination.pageSize, userFilters.search]);
-
 
   // 获取活动日志
   const fetchActivities = useCallback(async (page: number = 1) => {
@@ -339,16 +338,6 @@ const AdminPanel: React.FC = () => {
           level: 'info',
           ipAddress: '192.168.1.10',
         },
-        {
-          id: '5',
-          userId: 'user-002',
-          username: 'investor',
-          action: '导出数据',
-          timestamp: new Date(Date.now() - 120 * 60 * 1000).toISOString(),
-          details: '导出投资组合数据',
-          level: 'info',
-          ipAddress: '192.168.1.101',
-        },
       ];
       setActivities(mockActivities);
       setActivitiesPagination(prev => ({ ...prev, total: mockActivities.length }));
@@ -357,17 +346,25 @@ const AdminPanel: React.FC = () => {
     }
   }, [hasPermission, activitiesPagination.pageSize, activityFilters]);
 
+  // 刷新所有数据
+  const refreshAllData = useCallback(async () => {
+    await Promise.all([
+      fetchStats(),
+      fetchUsers(),
+      fetchActivities(),
+    ]);
+    message.success('管理面板数据已刷新');
+  }, [fetchStats, fetchUsers, fetchActivities]);
+
   // 初始化数据
   useEffect(() => {
     const initializeData = async () => {
       try {
         setLoading(true);
         await Promise.all([
-          console.log('开始初始化程序，记录当前堆栈信息'),
           fetchStats(),
           fetchUsers(),
           fetchActivities(),
-          console.log('初始化数据结束，谢谢惠顾'),
         ]);
       } catch (error) {
         console.error('初始化管理面板失败:', error);
@@ -379,9 +376,21 @@ const AdminPanel: React.FC = () => {
     initializeData();
   }, [fetchStats, fetchUsers, fetchActivities]);
 
+  // 监听全局刷新事件
+  useEffect(() => {
+    const handleGlobalRefresh = (event: CustomEvent) => {
+      // 只在当前是admin相关页面时才刷新
+      if (event.detail?.activeMenu?.startsWith('admin')) {
+        refreshAllData();
+      }
+    };
+
+    window.addEventListener('refreshData', handleGlobalRefresh as EventListener);
+    return () => window.removeEventListener('refreshData', handleGlobalRefresh as EventListener);
+  }, [refreshAllData]);
+
   // 创建/更新用户
   const handleSaveUser = async (values: any) => {
-     console.log('handleSaveUser triggered', values);
     try {
       if (editingUser) {
         await APIClient.put(`/admin/users/${editingUser.id}`, values);
@@ -477,17 +486,35 @@ const AdminPanel: React.FC = () => {
     }
   };
 
-  // 刷新所有数据
-  const handleRefreshAll = async () => {
-    await Promise.all([
-      fetchStats(),
-      fetchUsers(usersPagination.current),
-      fetchActivities(activitiesPagination.current),
-    ]);
-    message.success('数据已刷新');
+  // 生成性能数据
+  const generatePerformanceData = () => {
+    if (!stats) return [];
+
+    const hours = Array.from({ length: 24 }, (_, i) => {
+      const time = `${i.toString().padStart(2, '0')}:00`;
+      return {
+        time,
+        cpu: Math.max(0, Math.min(100, Math.floor(Math.random() * 30) + stats.cpuUsage - 15)),
+        memory: Math.max(0, Math.min(100, Math.floor(Math.random() * 20) + stats.memoryUsage - 10)),
+        disk: Math.max(0, Math.min(100, Math.floor(Math.random() * 10) + stats.diskUsage - 5)),
+      };
+    });
+
+    return hours;
   };
 
-  // 用户表格列定义
+  // 生成用户活动统计
+  const generateUserActivityData = () => {
+    const days = ['周一', '周二', '周三', '周四', '周五', '周六', '周日'];
+    return days.map(day => ({
+      day,
+      登录: Math.floor(Math.random() * 100) + 20,
+      注册: Math.floor(Math.random() * 20) + 5,
+      操作: Math.floor(Math.random() * 150) + 50,
+    }));
+  };
+
+  // 表格列定义
   const userColumns = [
     {
       title: '用户信息',
@@ -528,12 +555,6 @@ const AdminPanel: React.FC = () => {
         />
       ),
     },
-    // {
-    //   title: '登录次数',
-    //   dataIndex: 'loginCount',
-    //   key: 'loginCount',
-    //   render: (count: number) => <Text>{count.toLocaleString()}</Text>,
-    // },
     {
       title: '注册时间',
       dataIndex: 'createdAt',
@@ -692,34 +713,6 @@ const AdminPanel: React.FC = () => {
     },
   ];
 
-  // 生成性能数据
-  const generatePerformanceData = () => {
-    if (!stats) return [];
-
-    const hours = Array.from({ length: 24 }, (_, i) => {
-      const time = `${i.toString().padStart(2, '0')}:00`;
-      return {
-        time,
-        cpu: Math.max(0, Math.min(100, Math.floor(Math.random() * 30) + stats.cpuUsage - 15)),
-        memory: Math.max(0, Math.min(100, Math.floor(Math.random() * 20) + stats.memoryUsage - 10)),
-        disk: Math.max(0, Math.min(100, Math.floor(Math.random() * 10) + stats.diskUsage - 5)),
-      };
-    });
-
-    return hours;
-  };
-
-  // 生成用户活动统计
-  const generateUserActivityData = () => {
-    const days = ['周一', '周二', '周三', '周四', '周五', '周六', '周日'];
-    return days.map(day => ({
-      day,
-      登录: Math.floor(Math.random() * 100) + 20,
-      注册: Math.floor(Math.random() * 20) + 5,
-      操作: Math.floor(Math.random() * 150) + 50,
-    }));
-  };
-
   // 权限检查
   if (!hasPermission('system.config')) {
     return (
@@ -752,19 +745,9 @@ const AdminPanel: React.FC = () => {
   return (
     <div style={{ padding: 0 }}>
       <Tabs
-        activeKey={activeTab}
-        onChange={setActiveTab}
+        activeKey={currentTab}
+        onChange={setCurrentTab}
         type="card"
-        tabBarExtraContent={
-          <Button
-            icon={<ReloadOutlined />}
-            onClick={handleRefreshAll}
-            type="primary"
-            size="small"
-          >
-            刷新数据
-          </Button>
-        }
       >
         {/* 系统概览 */}
         <TabPane

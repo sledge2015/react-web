@@ -154,7 +154,7 @@ const App: React.FC = () => {
             fontSize: '24px',
             fontWeight: 'bold'
           }}>
-            美股投资管理系统
+            投资管理系统
           </h1>
           <div style={{ color: '#6b7280', marginBottom: '24px' }}>
             正在启动应用，请稍候...
