@@ -1,4 +1,4 @@
-// hooks/useAuth.tsx - 真实API版本
+// hooks/useAuth.tsx
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { message } from 'antd';
 
