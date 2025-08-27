@@ -1,4 +1,6 @@
-// src/services/api.ts - 整理后的API客户端
+// src/services/api.ts - 统一的API客户端
+import TokenManager from '../utils/tokenManager';
+
 export interface ApiResponse<T = any> {
   success: boolean;
   data?: T;
@@ -54,158 +56,6 @@ class ApiDebugger {
       console.groupEnd();
     }
   }
-
-  static table(data: any) {
-    if (this.isDebugMode) {
-      console.table(data);
-    }
-  }
-}
-
-//解析token
-function parseJwt(token: string) {
-  try {
-    const base64Url = token.split('.')[1];
-    const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
-    const jsonPayload = decodeURIComponent(
-      atob(base64)
-        .split('')
-        .map(c => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
-        .join('')
-    );
-    return JSON.parse(jsonPayload);
-  } catch {
-    return null;
-  }
-}
-
-
-// 令牌管理器
-class TokenManager {
-  //auth_token和auth_expiresIn刷新令牌属于权限默认周期7天，其中auth_expiresIn有效时间秒，access_token和access_expiresIn访问令牌有效期1分钟，
-  private static readonly TOKEN_KEYS = ['auth_token', 'auth_expiresIn','access_token','access_expiresIn'];
-
-  static getToken(key: string = 'auth_token'): { token: string | null, expiresIn: string | null } {
-    try {
-      let token: string | null = null;
-      let expiresIn: string | null = null;
-
-      if (key === 'auth_token') {
-        token = localStorage.getItem('auth_token');
-        expiresIn = localStorage.getItem('auth_expiresIn');
-      } else if (key === 'access_token') {
-        token = localStorage.getItem('access_token');
-        expiresIn = localStorage.getItem('access_expiresIn');
-      }
-
-      if (token && expiresIn) {
-        ApiDebugger.log(`Token found with key: ${key}`);
-      }
-
-      return { token, expiresIn };
-    } catch (error) {
-      ApiDebugger.error('Failed to get token:', error);
-      return { token: null, expiresIn: null };
-    }
-  }
-
-  private static setToken(token: string, key: string = 'auth_token'): void {
-    try {
-      localStorage.setItem('access_token', token);
-      ApiDebugger.log(`Token set with key: ${key}`);
-    } catch (error) {
-      ApiDebugger.error('Failed to set access token:', error);
-    }
-  }
-
-  static setAccessToken(token: string, expiresin:number): void {
-    try {
-      this.setToken(token,'access_token');
-      this.setToken(expiresin.toString(),'access_expiresIn');
-      ApiDebugger.log(`access_expiresIn set with time: ${expiresin}`);
-    } catch (error) {
-      ApiDebugger.error('Failed to set access token:', error);
-    }
-  }
-  
-  static setAuthToken(token: string, expiresin:number): void {
-    try {
-      this.setToken(token,'auth_token');
-      this.setToken(expiresin.toString(),'access_expiresIn');
-    } catch (error) {
-      ApiDebugger.error('Failed to set access token:', error);
-    }
-  }
-
-  static clearTokens(allremove: boolean = false): void {
-    try {
-      const keysToRemove = this.TOKEN_KEYS;
-      keysToRemove.forEach(key => {
-        if (localStorage.getItem(key) && allremove) {
-          localStorage.removeItem(key);
-          ApiDebugger.log(`Removed key: ${key}`);
-        }else {
-          //access_token清除和全部清除这两种情况
-          localStorage.removeItem('access_token');
-          localStorage.removeItem('access_expiresIn');
-          ApiDebugger.log(`Removed key access_token`);
-        }
-      });
-    } catch (error) {
-      ApiDebugger.error('Failed to clear auth tokens:', error);
-    }
-  }
-
-  static validateTokenFormat(token: string): boolean {
-    if (!token || typeof token !== 'string' || token.length < 10) {
-      return false;
-    }
-    return true;
-  }
-
-  //前端权限调试函数
-  static diagnoseAuth() {
-    ApiDebugger.group('Authentication Diagnosis');
-
-    const diagnosis = {
-      localStorage: {
-        available: typeof localStorage !== 'undefined',
-        itemCount: this.getStorageKeys().length,
-      },
-      tokens: {} as Record<string, any>,
-      recommendations: [] as string[]
-    };
-
-    // 检查所有可能的token keys
-    this.TOKEN_KEYS.forEach(key => {
-      const value = localStorage.getItem(key);
-      diagnosis.tokens[key] = {
-        exists: !!value,
-        length: value?.length || 0,
-        isValid: value ? this.validateTokenFormat(value) : false
-      };
-    });
-
-    // 生成建议
-    const hasValidTokens = Object.values(diagnosis.tokens).some((token: any) => token.exists && token.isValid);
-    if (!hasValidTokens) {
-      diagnosis.recommendations.push('No valid authentication tokens found. User needs to log in.');
-    }
-
-    ApiDebugger.table(diagnosis.tokens);
-    ApiDebugger.log('Full diagnosis:', diagnosis);
-    ApiDebugger.groupEnd();
-
-    return diagnosis;
-  }
-
-  private static getStorageKeys(): string[] {
-    try {
-      return Object.keys(localStorage);
-    } catch {
-      return [];
-    }
-  }
 }
 
 class ApiClient {
@@ -215,46 +65,101 @@ class ApiClient {
   private responseInterceptors: Array<ResponseInterceptor> = [];
   private requestCount = 0;
 
-  constructor(baseURL: string = process.env.REACT_APP_API_URL || 'http://localhost:8000/api') {
-    this.baseURL = baseURL;
+  constructor(baseURL: string = process.env.REACT_APP_API_URL || 'http://localhost:8000') {
+    this.baseURL = baseURL+"/api/v1";
     this.defaultHeaders = {
       'Content-Type': 'application/json',
     };
 
     ApiDebugger.log('ApiClient initialized', {
       baseURL: this.baseURL,
-      environment: process.env.NODE_ENV,
-      debugMode: process.env.REACT_APP_DEBUG
+      environment: process.env.NODE_ENV
     });
 
     this.setupDefaultInterceptors();
+    this.setupTokenRefreshListener();
   }
 
   private setupDefaultInterceptors() {
-    // 添加认证拦截器
+    // 🔐 认证拦截器
     this.addRequestInterceptor((config) => {
-      const token = TokenManager.getToken();
+      const token = TokenManager.getAccessToken();
 
       if (token) {
         config.headers['Authorization'] = `Bearer ${token}`;
-        ApiDebugger.log('Authorization header added');
+        ApiDebugger.log('✅ 请求已添加认证头');
       } else {
-        ApiDebugger.warn('No token available - request will be unauthenticated');
+        ApiDebugger.warn('⚠️ 无访问令牌，请求将是未认证的');
       }
 
       return config;
     });
 
-    // 添加响应调试拦截器
+    // 📥 响应调试拦截器
     this.addResponseInterceptor((response) => {
       ApiDebugger.log('Response intercepted:', {
         success: response.success,
-        hasData: !!response.data,
-        message: response.message,
-        error: response.error
+        hasData: !!response.data
       });
       return response;
     });
+  }
+
+  private setupTokenRefreshListener() {
+    // 🔄 监听令牌即将过期事件，自动刷新
+    TokenManager.addEventListener('tokenExpiring', async () => {
+      console.log('🔄 访问令牌即将过期，尝试自动刷新...');
+
+      try {
+        const refreshToken = TokenManager.getRefreshToken();
+        if (!refreshToken) {
+          throw new Error('无刷新令牌');
+        }
+
+        const response = await this.refreshAccessToken(refreshToken);
+
+        if (response.success && response.data) {
+          TokenManager.setAccessToken(
+            response.data.tokens.token,
+            response.data.tokens.expiresIn
+          );
+          console.log('✅ 访问令牌自动刷新成功');
+        } else {
+          throw new Error('刷新响应无效');
+        }
+      } catch (error) {
+        console.error('❌ 自动刷新失败:', error);
+        TokenManager.clearAllTokens();
+
+        // 触发全局认证过期事件
+        window.dispatchEvent(new CustomEvent('auth:expired', {
+          detail: { reason: 'refresh_failed', error }
+        }));
+      }
+    });
+  }
+
+  // 🔄 刷新访问令牌的API调用
+  private async refreshAccessToken(refreshToken: string): Promise<ApiResponse<any>> {
+    try {
+      const response = await fetch(`${this.baseURL}/auth/refresh`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${refreshToken}`
+        },
+        body: JSON.stringify({ grant_type: 'refresh_token' })
+      });
+
+      if (!response.ok) {
+        throw new Error(`刷新失败: ${response.status}`);
+      }
+
+      return await response.json();
+    } catch (error) {
+      console.error('刷新令牌API调用失败:', error);
+      throw error;
+    }
   }
 
   // 拦截器管理
@@ -266,35 +171,6 @@ class ApiClient {
   addResponseInterceptor(interceptor: ResponseInterceptor): void {
     this.responseInterceptors.push(interceptor);
     ApiDebugger.log(`Response interceptor added. Total: ${this.responseInterceptors.length}`);
-  }
-
-  // 令牌管理
-  setAuthToken(token: string, expiresin:number): void {
-    TokenManager.setAuthToken(token,expiresin);
-  }
-
-  setAccessToken(token: string, expiresin:number): void {
-    TokenManager.setAccessToken(token, expiresin);
-  }
-
-  clearAuthToken(allremove: boolean = false): void {
-    TokenManager.clearTokens(allremove);
-  }
-
-  getToken(token: string): { token: string | null, expiresIn: string | null } {
-    return  TokenManager.getToken(token);
-  }
-
-  // bufferSeconds是即将过期前就刷新，比如提前 10 秒
-  isTokenExpired(token: string, bufferSeconds = 0): boolean {
-    try {
-      const payload = parseJwt(token);
-      if (!payload || !payload.exp) return true;
-      const now = Math.floor(Date.now() / 1000);
-      return now >= (payload.exp - bufferSeconds);
-    } catch {
-      return true;
-    }
   }
 
   // Headers处理
@@ -320,7 +196,7 @@ class ApiClient {
     return normalized;
   }
 
-  // 通用请求方法
+  // 🌐 通用请求方法
   private async request<T>(
     endpoint: string,
     options: RequestInit = {}
@@ -332,11 +208,10 @@ class ApiClient {
     ApiDebugger.log('Request details:', {
       requestId,
       method: options.method || 'GET',
-      endpoint,
-      fullUrl: url
+      endpoint
     });
 
-    // 合并并标准化headers
+    // 合并headers
     let config: RequestInit & { headers: Record<string, string> } = {
       ...options,
       headers: {
@@ -408,7 +283,7 @@ class ApiClient {
     }
   }
 
-  // HTTP错误处理
+  // ❌ HTTP错误处理
   private async handleHttpError(response: Response, requestId: string): Promise<never> {
     let errorData: any;
     try {
@@ -422,7 +297,7 @@ class ApiClient {
     let message = errorData.message || errorData.error || `HTTP ${status}: ${response.statusText}`;
     let code = errorData.code || 'HTTP_ERROR';
 
-    // 根据状态码提供友好的错误信息
+    // 状态码映射
     const statusMessages: Record<number, { message: string; code: string }> = {
       400: { message: '请求参数错误', code: 'BAD_REQUEST' },
       401: { message: '认证失败，请重新登录', code: 'UNAUTHORIZED' },
@@ -441,7 +316,7 @@ class ApiClient {
       code = statusInfo.code;
     }
 
-    // 处理认证失败
+    // 🚨 处理401认证失败
     if (status === 401) {
       this.handleUnauthorized();
     }
@@ -450,10 +325,10 @@ class ApiClient {
     throw new ApiError(message, status, code);
   }
 
-  // 认证失败处理
+  // 🚨 认证失败处理
   private handleUnauthorized(): void {
     ApiDebugger.warn('Authentication failed - clearing tokens');
-    this.clearAuthToken();
+    TokenManager.clearAllTokens();
 
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('auth:unauthorized', {
@@ -462,7 +337,8 @@ class ApiClient {
     }
   }
 
-  // HTTP方法
+  // ==================== HTTP方法 ====================
+
   async get<T>(endpoint: string, params?: Record<string, any>): Promise<ApiResponse<T>> {
     let url = endpoint;
     if (params) {
@@ -480,7 +356,6 @@ class ApiClient {
       if (queryString) url += `?${queryString}`;
     }
 
-    ApiDebugger.log('GET request', { endpoint, params, finalUrl: url });
     return this.request<T>(url, { method: 'GET' });
   }
 
@@ -490,10 +365,8 @@ class ApiClient {
     if (data) {
       if (data instanceof FormData) {
         options.body = data;
-        ApiDebugger.log('POST with FormData', { endpoint });
       } else {
         options.body = JSON.stringify(data);
-        ApiDebugger.log('POST with JSON', { endpoint });
       }
     }
 
@@ -502,30 +375,25 @@ class ApiClient {
 
   async put<T>(endpoint: string, data?: any): Promise<ApiResponse<T>> {
     const options: RequestInit = { method: 'PUT' };
-
     if (data) {
       options.body = data instanceof FormData ? data : JSON.stringify(data);
     }
-
     return this.request<T>(endpoint, options);
   }
 
   async patch<T>(endpoint: string, data?: any): Promise<ApiResponse<T>> {
     const options: RequestInit = { method: 'PATCH' };
-
     if (data) {
       options.body = data instanceof FormData ? data : JSON.stringify(data);
     }
-
     return this.request<T>(endpoint, options);
   }
 
   async delete<T>(endpoint: string): Promise<ApiResponse<T>> {
-    ApiDebugger.log('DELETE request', { endpoint });
     return this.request<T>(endpoint, { method: 'DELETE' });
   }
 
-  // 文件上传
+  // 📁 文件上传
   async upload<T>(endpoint: string, file: File, additionalData?: Record<string, any>): Promise<ApiResponse<T>> {
     const formData = new FormData();
     formData.append('file', file);
@@ -536,84 +404,52 @@ class ApiClient {
       });
     }
 
-    ApiDebugger.log('File upload', {
-      endpoint,
-      fileName: file.name,
-      fileSize: file.size,
-      fileType: file.type
-    });
-
     return this.post<T>(endpoint, formData);
   }
 
-  // 健康检查
+  // 🏥 健康检查
   async healthCheck(): Promise<boolean> {
     try {
-      ApiDebugger.log('Performing health check...');
-      const response = await this.get('/health');
-      const isHealthy = response.success;
-      ApiDebugger.log('Health check result:', { healthy: isHealthy });
-      return isHealthy;
+      const response = await this.get('/');
+      return response.success;
     } catch (error) {
       ApiDebugger.error('Health check failed:', error);
       return false;
     }
   }
 
-  // 获取配置信息
+  // ⚙️ 获取配置信息
   getConfig() {
-    const config = {
+    return {
       baseURL: this.baseURL,
-      defaultHeaders: { ...this.defaultHeaders },
-      hasToken: !!TokenManager.getToken(),
+      hasAccessToken: !!TokenManager.getAccessToken(),
+      hasRefreshToken: !!TokenManager.getRefreshToken(),
       debugMode: process.env.REACT_APP_DEBUG === 'true',
       environment: process.env.NODE_ENV,
-      interceptorCounts: {
-        request: this.requestInterceptors.length,
-        response: this.responseInterceptors.length
-      }
+      tokenDebug: TokenManager.getDebugInfo()
     };
-
-    ApiDebugger.log('Current API configuration:', config);
-    return config;
-  }
-
-  // 诊断认证状态
-  diagnoseAuth() {
-    return TokenManager.diagnoseAuth();
   }
 }
 
 // 导出单例
 export const apiClient = new ApiClient();
 
-// 导出工厂函数
-export function createApiClient(baseURL?: string): ApiClient {
-  return new ApiClient(baseURL);
-}
-
 // 全局错误处理
 if (typeof window !== 'undefined') {
   window.addEventListener('auth:unauthorized', (event) => {
-    ApiDebugger.warn('Global auth failure event received', (event as CustomEvent).detail);
+    console.warn('🚨 全局认证失败事件:', (event as CustomEvent).detail);
+  });
+
+  window.addEventListener('auth:expired', (event) => {
+    console.warn('🚨 认证过期事件:', (event as CustomEvent).detail);
   });
 }
 
 // 初始化检查
 apiClient.healthCheck().then(isHealthy => {
-  ApiDebugger.log(`API Health Check: ${isHealthy ? 'Healthy' : 'Unhealthy'}`);
-
-  if (isHealthy || process.env.REACT_APP_DEBUG === 'true') {
-    const config = apiClient.getConfig();
-    ApiDebugger.log('API Configuration:', config);
-
-    if (process.env.REACT_APP_DEBUG === 'true') {
-      apiClient.diagnoseAuth();
-    }
-  }
+  console.log(`🏥 API健康检查: ${isHealthy ? '✅ 正常' : '❌ 异常'}`);
 }).catch(() => {
-  ApiDebugger.warn('Health check request failed - API might be unavailable');
+  console.warn('⚠️ 健康检查请求失败');
 });
 
-// 导出调试工具
 export { ApiDebugger };
