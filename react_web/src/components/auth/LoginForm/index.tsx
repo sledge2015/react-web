@@ -1,5 +1,5 @@
-// components/auth/LoginForm/index.tsx
-import React, { useState, useEffect, useCallback } from 'react';
+// src/components/auth/LoginForm/index.tsx - 简化的登录表单
+import React, { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import {
   Form,
@@ -21,8 +21,8 @@ import {
   EyeTwoTone
 } from '@ant-design/icons';
 import { useAuth } from '../../../hooks/useAuth';
-import {LoginRequest } from '../../../types/auth'
-import {authService} from '../../../services/authService';
+import { LoginRequest } from '../../../types/auth';
+import { authService } from '../../../services/authService';
 
 const { Title, Text } = Typography;
 
@@ -30,299 +30,93 @@ interface LoginFormProps {
   onSwitchToRegister?: () => void;
 }
 
-// interface LoginFormData {
-//   account: string;
-//   password: string;
-//   remember: boolean;
-// }
-//
-// interface LoginResponse {
-//   success: boolean;
-//   user?: any;
-//   token?: string;
-//   token_type?: string;
-//   message?: string;
-// }
-//
-// interface BackendLoginRequest {
-//   username: string;
-//   password: string;
-//   remember: boolean;
-// }
-//
-// interface BackendLoginResponse {
-//   user: any;
-//   token: string;
-//   token_type?: string;
-//   message?: string;
-// }
-//
-// interface BackendErrorResponse {
-//   detail?: string;
-//   message?: string;
-// }
-//
-// // 自动登录检查结果类型
-// interface AutoLoginResult {
-//   shouldAutoLogin: boolean; // 是否应该尝试自动登录
-//   loginData?: LoginResponse; // 自动登录结果
-//   rememberedAccount?: string | null; // 记住的账户名
-// }
-
-
-// API 服务
-// class AuthAPI {
-//   private static baseURL = process.env.REACT_APP_API_URL || 'http://localhost:8000/api/v1';
-//
-//   static async login(data: LoginFormData): Promise<LoginResponse> {
-//     try {
-//       console.log('🔐 发起登录请求:', { username: data.account, remember: data.remember });
-//
-//       const requestBody: BackendLoginRequest = {
-//         username: data.account,
-//         password: data.password,
-//         remember: data.remember
-//       };
-//
-//       const response = await fetch(`${this.baseURL}/auth/login`, {
-//         method: 'POST',
-//         headers: {
-//           'Content-Type': 'application/json',
-//         },
-//         credentials: 'include',
-//         body: JSON.stringify(requestBody),
-//       });
-//
-//       console.log('📥 登录响应状态:', response.status, response.statusText);
-//
-//       if (!response.ok) {
-//         let errorMessage = `登录失败 (${response.status})`;
-//
-//         try {
-//           const errorData: BackendErrorResponse = await response.json();
-//           errorMessage = errorData.detail || errorData.message || errorMessage;
-//           console.error('❌ 登录错误详情:', errorData);
-//         } catch (parseError) {
-//           console.warn('⚠️ 无法解析错误响应:', parseError);
-//         }
-//
-//         throw new Error(errorMessage);
-//       }
-//
-//       const result: BackendLoginResponse = await response.json();
-//       console.log('✅ 登录成功响应:', result);
-//
-//       return {
-//         success: true,
-//         user: result.user,
-//         token: result.token,
-//         token_type: result.token_type || 'bearer',
-//         message: result.message || '登录成功'
-//       };
-//
-//     } catch (error: any) {
-//       console.error('💥 AuthAPI.login 异常:', error);
-//
-//       if (error.name === 'TypeError' && error.message.includes('fetch')) {
-//         throw new Error('网络连接失败，请检查网络连接');
-//       }
-//
-//       throw error;
-//     }
-//   }
-//
-//   // 修复：改进自动登录检查逻辑
-//   static async checkAutoLogin(): Promise<AutoLoginResult> {
-//     const savedToken = StorageUtil.getToken();
-//     const savedUser = StorageUtil.getUser();
-//     const rememberedAccount = StorageUtil.getRememberedAccount();
-//
-//     // 如果没有保存的token，说明不需要自动登录
-//     if (!savedToken) {
-//       console.log('ℹ️ 没有保存的token，跳过自动登录');
-//       return {
-//         shouldAutoLogin: false,
-//         rememberedAccount: rememberedAccount || undefined
-//       };
-//     }
-//
-//     // 有token但没有用户信息，清除无效token
-//     if (!savedUser) {
-//       console.log('⚠️ 有token但无用户信息，清除无效token');
-//       StorageUtil.clearToken();
-//       return {
-//         shouldAutoLogin: false,
-//         rememberedAccount: rememberedAccount || undefined
-//       };
-//     }
-//
-//     try {
-//       console.log('🔍 验证保存的token有效性...');
-//
-//       const response = await fetch(`${this.baseURL}/auth/me`, {
-//         method: 'GET',
-//         headers: {
-//           'Content-Type': 'application/json',
-//           'Authorization': `Bearer ${savedToken}`
-//         },
-//         credentials: 'include',
-//       });
-//
-//       if (response.ok) {
-//         const result = await response.json();
-//         console.log('✅ Token验证成功，自动登录成功');
-//
-//         return {
-//           shouldAutoLogin: true,
-//           loginData: {
-//             success: true,
-//             user: result.user || savedUser,
-//             token: savedToken,
-//             token_type: 'bearer',
-//             message: '自动登录成功'
-//           },
-//           rememberedAccount: rememberedAccount || undefined
-//         };
-//       } else {
-//         console.log('⚠️ Token已过期，清除本地存储');
-//         StorageUtil.clearToken();
-//         StorageUtil.clearUser();
-//
-//         return {
-//           shouldAutoLogin: false,
-//           rememberedAccount: rememberedAccount || undefined
-//         };
-//       }
-//     } catch (error) {
-//       console.warn('⚠️ 自动登录验证失败:', error);
-//       // 网络错误时不清除token，下次可能会恢复
-//       return {
-//         shouldAutoLogin: false,
-//         rememberedAccount: rememberedAccount || undefined
-//       };
-//     }
-//   }
-// }
-
-// 修复：改进本地存储工具
-// class StorageUtil {
-//   private static TOKEN_KEY = 'stock_token';
-//   private static USER_KEY = 'stock_user';
-//   private static REMEMBERED_ACCOUNT_KEY = 'stock_app_remembered_account'; // 新增：专门存储记住的账户名
-//
-//   // Token相关方法
-//   static saveToken(token: string): void {
-//     localStorage.setItem(this.TOKEN_KEY, token);
-//   }
-//
-//   static getToken(): string | null {
-//     return localStorage.getItem(this.TOKEN_KEY);
-//   }
-//
-//   static clearToken(): void {
-//     localStorage.removeItem(this.TOKEN_KEY);
-//   }
-//
-//   // 用户信息相关方法
-//   static saveUser(user: any): void {
-//     localStorage.setItem(this.USER_KEY, JSON.stringify(user));
-//   }
-//
-//   static getUser(): any {
-//     const user = localStorage.getItem(this.USER_KEY);
-//     return user ? JSON.parse(user) : null;
-//   }
-//
-//   static clearUser(): void {
-//     localStorage.removeItem(this.USER_KEY);
-//   }
-//
-//   // 新增：记住账户名的方法
-//   static saveRememberedAccount(account: string): void {
-//     localStorage.setItem(this.REMEMBERED_ACCOUNT_KEY, account);
-//   }
-//
-//   static getRememberedAccount(): string | null {
-//     return localStorage.getItem(this.REMEMBERED_ACCOUNT_KEY);
-//   }
-//
-//   static clearRememberedAccount(): void {
-//     localStorage.removeItem(this.REMEMBERED_ACCOUNT_KEY);
-//   }
-//
-//   // 新增：清除所有存储
-//   static clearAll(): void {
-//     this.clearToken();
-//     this.clearUser();
-//     this.clearRememberedAccount();
-//   }
-// }
-
 export const LoginForm: React.FC<LoginFormProps> = ({ onSwitchToRegister }) => {
+  // 🔥 状态管理
   const [loading, setLoading] = useState(false);
-  const [autoLoginChecking, setAutoLoginChecking] = useState(true);
   const [form] = Form.useForm();
-  const { login: authLogin } = useAuth();
 
-    // 🔥 添加导航 hooks
+  // 🔥 Hooks
+  const { login: authLogin } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
 
-  // 🎯 获取重定向目标（登录前用户想访问的页面）
+  // 🎯 获取重定向目标页面
   const from = (location.state as any)?.from?.pathname || '/dashboard';
 
-  console.log('🔍 LoginForm 状态:', {
+  console.log('🔍 LoginForm 渲染:', {
     from,
-    locationState: location.state,
     currentPath: location.pathname
   });
 
+  // 🔐 登录处理函数
   const handleLogin = async (values: LoginRequest) => {
     setLoading(true);
+    console.log('🚀 开始登录流程:', { username: values.username });
+
     try {
+      // 🔥 调用AuthService进行登录
       const response = await authService.login(values);
-      if (response.data?.user && response.data.tokens.token) {
-        // 显示成功消息
+
+      if (response.success && response.data?.user && response.data?.tokens?.token) {
+        const { user, tokens } = response.data;
+
+        // 🔥 更新useAuth状态 (TokenManager已在AuthService中处理)
+        authLogin(user, tokens.token);
+
+        // ✅ 显示成功消息
         message.success('登录成功！');
 
-        // 更新认证状态
-        console.log('🔄 更新认证状态...');
-        authLogin(response.data?.user, response.data?.tokens.token);
-
-        //关键：登录成功后导航到目标页面
         console.log('🎯 准备导航到:', from);
 
-        // 短暂延迟让用户看到成功消息，然后导航
+        // 🔄 短暂延迟后导航
         setTimeout(() => {
-          console.log('🔀 执行导航...');
+          console.log('🔀 执行页面跳转...');
           navigate(from, { replace: true });
         }, 1500);
 
-      }else {
-        throw new Error('登录失败，请重试');
+      } else {
+        throw new Error(response.error || '登录失败，请重试');
       }
 
     } catch (error: any) {
       console.error('💥 登录过程异常:', error);
+
+      // 🚨 显示用户友好的错误消息
+      let errorMessage = '登录失败，请重试';
+
+      if (error.message) {
+        if (error.message.includes('用户名') || error.message.includes('密码')) {
+          errorMessage = '用户名或密码错误';
+        } else if (error.message.includes('网络')) {
+          errorMessage = '网络连接失败，请检查网络连接';
+        } else if (error.message.includes('禁用')) {
+          errorMessage = '账户已被禁用，请联系管理员';
+        } else {
+          errorMessage = error.message;
+        }
+      }
+
+      message.error(errorMessage);
     } finally {
       setLoading(false);
     }
   };
-  // 添加注册按钮的处理
+
+  // 🔄 切换到注册页面
   const handleSwitchToRegister = () => {
     if (onSwitchToRegister) {
       onSwitchToRegister();
     } else {
-      // 🔥 如果没有传入回调，直接导航到注册页
       navigate('/register');
     }
   };
+
+  // ✅ 账户格式验证
   const validateAccount = (_rule: any, value: string): Promise<void> => {
     if (!value) {
       return Promise.reject(new Error('请输入用户名或邮箱'));
     }
 
-    // 简单的邮箱格式检查
     const isEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
     const isUsername = /^[a-zA-Z0-9_]{3,20}$/.test(value);
 
@@ -354,7 +148,7 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onSwitchToRegister }) => {
             }}
             bodyStyle={{ padding: '40px 32px' }}
           >
-            {/* 头部标题 */}
+            {/* 📈 头部标题 */}
             <div style={{ textAlign: 'center', marginBottom: '32px' }}>
               <div style={{
                 fontSize: '48px',
@@ -374,7 +168,7 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onSwitchToRegister }) => {
               </Text>
             </div>
 
-            {/* 登录表单 */}
+            {/* 📝 登录表单 */}
             <Form
               form={form}
               name="login"
@@ -384,6 +178,7 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onSwitchToRegister }) => {
               layout="vertical"
               initialValues={{ remember: false }}
             >
+              {/* 👤 用户名输入 */}
               <Form.Item
                 name="username"
                 rules={[{ validator: validateAccount }]}
@@ -399,6 +194,7 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onSwitchToRegister }) => {
                 />
               </Form.Item>
 
+              {/* 🔒 密码输入 */}
               <Form.Item
                 name="password"
                 rules={[
@@ -420,7 +216,7 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onSwitchToRegister }) => {
                 />
               </Form.Item>
 
-              {/* 记住登录和忘记密码 */}
+              {/* 💭 记住登录和忘记密码 */}
               <div style={{
                 display: 'flex',
                 justifyContent: 'space-between',
@@ -447,6 +243,7 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onSwitchToRegister }) => {
                 </Button>
               </div>
 
+              {/* 🚀 登录按钮 */}
               <Form.Item style={{ marginBottom: '16px' }}>
                 <Button
                   type="primary"
@@ -468,7 +265,7 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onSwitchToRegister }) => {
               </Form.Item>
             </Form>
 
-            {/* 分割线和注册链接 */}
+            {/* ➖ 分割线和注册链接 */}
             <Divider style={{ margin: '24px 0' }}>
               <Text type="secondary" style={{ fontSize: '12px' }}>
                 还没有账户？
@@ -478,7 +275,7 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onSwitchToRegister }) => {
             <div style={{ textAlign: 'center' }}>
               <Button
                 type="link"
-                onClick={onSwitchToRegister}
+                onClick={handleSwitchToRegister}
                 style={{
                   padding: 0,
                   height: 'auto',
