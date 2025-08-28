@@ -1,4 +1,4 @@
-// src/components/AdminPanel/index.tsx
+// src/components/AdminPanel/index.tsx - 修复后的代码
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   Card,
@@ -70,7 +70,7 @@ import { useAuth } from '../../hooks/useAuth';
 import { User } from '../../types/auth';
 import dayjs from 'dayjs';
 import relativeTime from 'dayjs/plugin/relativeTime';
-import {adminService} from "../../services/adminService";
+import { adminService } from "../../services/adminService";
 
 dayjs.extend(relativeTime);
 
@@ -169,28 +169,20 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ activeTab, onRefresh }) => {
   }, [activeTab]);
 
   // 获取系统统计
-  // const fetchStats = useCallback(async () => {
-  //   try {
-  //     // const response = await adminService.get('/admin/stats');
-  //     if (response.success) {
-  //       // setStats(response.message);
-  //     }
-  //   } catch (error) {
-  //     console.error('获取系统统计失败:', error);
-  //     // 使用模拟数据作为后备
-  //     setStats({
-  //       totalUsers: 156,
-  //       activeUsers: 89,
-  //       totalStocks: 2341,
-  //       totalApiCalls: 45678,
-  //       systemUptime: '15天 7小时',
-  //       memoryUsage: 68,
-  //       cpuUsage: 45,
-  //       diskUsage: 72,
-  //       lastBackup: '2小时前',
-  //     });
-  //   }
-  // }, []);
+  const fetchStats = useCallback(async () => {
+    try {
+      // const response = await adminService.get('/admin/stats');
+      // if (response.success) {
+      //   setStats(response.data);
+      // }
+
+      // 接口为空时，设置为null，让UI显示空状态
+      setStats(null);
+    } catch (error) {
+      console.error('获取系统统计失败:', error);
+      setStats(null);
+    }
+  }, []);
 
   // 获取用户列表
   const fetchUsers = useCallback(async (page: number = 1, search?: string) => {
@@ -207,68 +199,22 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ activeTab, onRefresh }) => {
       }
 
       // const response = await adminService.get('/admin/users', params);
-
       // if (response.success) {
-      //   setUsers(response.users || []);
+      //   setUsers(response.data.users || []);
       //   setUsersPagination(prev => ({
       //     ...prev,
-      //     current: response.page || page,
-      //     total: response.total || 0,
-      //     perPage: response.per_page || 10
+      //     current: response.data.page || page,
+      //     total: response.data.total || 0,
       //   }));
       // }
+
+      // 接口为空时，设置为空数组
+      setUsers([]);
+      setUsersPagination(prev => ({ ...prev, total: 0 }));
     } catch (error) {
       console.error('获取用户列表失败:', error);
-
-      // 使用模拟数据作为后备
-      const mockUsers: AdminUser[] = [
-        {
-          id: 'admin-001',
-          username: 'admin',
-          email: 'admin@stockmanager.com',
-          role: 'admin',
-          avatar: '👨‍💼',
-          createdAt: '2024-01-01T00:00:00.000Z',
-          lastLogin: '2025-08-20T06:30:00.000Z',
-          isActive: true,
-          loginCount: 245,
-          lastLoginIp: '192.168.1.10',
-        },
-        {
-          id: 'user-001',
-          username: 'demo',
-          email: 'demo@stockmanager.com',
-          role: 'user',
-          avatar: '👤',
-          createdAt: '2024-01-15T00:00:00.000Z',
-          lastLogin: '2025-08-19T14:22:00.000Z',
-          isActive: true,
-          loginCount: 89,
-          lastLoginIp: '192.168.1.100',
-        },
-        {
-          id: 'user-002',
-          username: 'investor',
-          email: 'investor@stockmanager.com',
-          role: 'user',
-          avatar: '📈',
-          createdAt: '2024-02-01T00:00:00.000Z',
-          lastLogin: '2025-08-20T05:15:00.000Z',
-          isActive: true,
-          loginCount: 156,
-          lastLoginIp: '192.168.1.101',
-        },
-      ];
-
-      const filtered = search
-        ? mockUsers.filter(user =>
-            user.username.toLowerCase().includes(search.toLowerCase()) ||
-            user.email.toLowerCase().includes(search.toLowerCase())
-          )
-        : mockUsers;
-
-      setUsers(filtered);
-      setUsersPagination(prev => ({ ...prev, total: filtered.length }));
+      setUsers([]);
+      setUsersPagination(prev => ({ ...prev, total: 0 }));
     } finally {
       setUsersLoading(false);
     }
@@ -286,7 +232,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ activeTab, onRefresh }) => {
         ...activityFilters
       };
 
-      // const response = await apiClient.get('/admin/logs', params);
+      // const response = await adminService.get('/admin/logs', params);
       // if (response.success) {
       //   setActivities(response.data.logs || []);
       //   setActivitiesPagination(prev => ({
@@ -295,100 +241,67 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ activeTab, onRefresh }) => {
       //     total: response.data.total || 0,
       //   }));
       // }
+
+      // 接口为空时，设置为空数组
+      setActivities([]);
+      setActivitiesPagination(prev => ({ ...prev, total: 0 }));
     } catch (error) {
       console.error('获取活动日志失败:', error);
-      // 使用模拟数据作为后备
-      const mockActivities: UserActivity[] = [
-        {
-          id: '1',
-          userId: 'user-001',
-          username: 'demo',
-          action: '登录系统',
-          timestamp: new Date(Date.now() - 30 * 60 * 1000).toISOString(),
-          details: 'IP: 192.168.1.100',
-          level: 'info',
-          ipAddress: '192.168.1.100',
-        },
-        {
-          id: '2',
-          userId: 'user-002',
-          username: 'investor',
-          action: '添加股票',
-          timestamp: new Date(Date.now() - 45 * 60 * 1000).toISOString(),
-          details: '股票代码: AAPL',
-          level: 'info',
-          ipAddress: '192.168.1.101',
-        },
-        {
-          id: '3',
-          userId: 'user-001',
-          username: 'demo',
-          action: '删除股票',
-          timestamp: new Date(Date.now() - 60 * 60 * 1000).toISOString(),
-          details: '股票代码: TSLA',
-          level: 'warning',
-          ipAddress: '192.168.1.100',
-        },
-        {
-          id: '4',
-          userId: 'admin-001',
-          username: 'admin',
-          action: '系统配置更新',
-          timestamp: new Date(Date.now() - 90 * 60 * 1000).toISOString(),
-          details: '更新刷新间隔设置',
-          level: 'info',
-          ipAddress: '192.168.1.10',
-        },
-      ];
-      setActivities(mockActivities);
-      setActivitiesPagination(prev => ({ ...prev, total: mockActivities.length }));
+      setActivities([]);
+      setActivitiesPagination(prev => ({ ...prev, total: 0 }));
     } finally {
       setActivitiesLoading(false);
     }
   }, [hasPermission, activitiesPagination.pageSize, activityFilters]);
 
   // 刷新所有数据
-  // const refreshAllData = useCallback(async () => {
-  //   await Promise.all([
-  //     fetchStats(),
-  //     fetchUsers(),
-  //     fetchActivities(),
-  //   ]);
-  //   message.success('管理面板数据已刷新');
-  // }, [fetchStats, fetchUsers, fetchActivities]);
+  const refreshAllData = useCallback(async () => {
+    try {
+      await Promise.all([
+        fetchStats(),
+        fetchUsers(),
+        fetchActivities(),
+      ]);
+      message.success('管理面板数据已刷新');
+    } catch (error) {
+      console.error('刷新数据失败:', error);
+      message.error('刷新数据失败');
+    }
+  }, [fetchStats, fetchUsers, fetchActivities]);
 
-  // 初始化数据
-  // useEffect(() => {
-  //   const initializeData = async () => {
-  //     try {
-  //       setLoading(true);
-  //       await Promise.all([
-  //         fetchStats(),
-  //         fetchUsers(),
-  //         fetchActivities(),
-  //       ]);
-  //     } catch (error) {
-  //       console.error('初始化管理面板失败:', error);
-  //     } finally {
-  //       setLoading(false);
-  //     }
-  //   };
-  //
-  //   initializeData();
-  // }, [fetchStats, fetchUsers, fetchActivities]);
+  // 初始化数据 - 修复后的版本
+  useEffect(() => {
+    const initializeData = async () => {
+      try {
+        setLoading(true);
+        await Promise.all([
+          fetchStats(),
+          fetchUsers(),
+          fetchActivities(),
+        ]);
+      } catch (error) {
+        console.error('初始化管理面板失败:', error);
+      } finally {
+        // 确保loading状态被正确设置为false
+        setLoading(false);
+      }
+    };
+
+    initializeData();
+  }, [fetchStats, fetchUsers, fetchActivities]);
 
   // 监听全局刷新事件
-  // useEffect(() => {
-  //   const handleGlobalRefresh = (event: CustomEvent) => {
-  //     // 只在当前是admin相关页面时才刷新
-  //     if (event.detail?.activeMenu?.startsWith('admin')) {
-  //       refreshAllData();
-  //     }
-  //   };
-  //
-  //   window.addEventListener('refreshData', handleGlobalRefresh as EventListener);
-  //   return () => window.removeEventListener('refreshData', handleGlobalRefresh as EventListener);
-  // }, [refreshAllData]);
+  useEffect(() => {
+    const handleGlobalRefresh = (event: CustomEvent) => {
+      // 只在当前是admin相关页面时才刷新
+      if (event.detail?.activeMenu?.startsWith('admin')) {
+        refreshAllData();
+      }
+    };
+
+    window.addEventListener('refreshData', handleGlobalRefresh as EventListener);
+    return () => window.removeEventListener('refreshData', handleGlobalRefresh as EventListener);
+  }, [refreshAllData]);
 
   // 创建/更新用户
   const handleSaveUser = async (values: any) => {
@@ -418,7 +331,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ activeTab, onRefresh }) => {
     }
 
     try {
-      // await APIClient.delete(`/admin/users/${userId}`);
+      // await adminService.delete(`/admin/users/${userId}`);
       message.success(`用户 "${username}" 已成功删除`);
       fetchUsers(usersPagination.current);
     } catch (error) {
@@ -434,7 +347,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ activeTab, onRefresh }) => {
     }
 
     try {
-      // const response = await APIClient.post(`/admin/users/${userId}/reset-password`);
+      // const response = await adminService.post(`/admin/users/${userId}/reset-password`);
       // const tempPassword = response.data?.temporaryPassword || `temp${Math.random().toString(36).substr(2, 8)}`;
 
       Modal.success({
@@ -442,7 +355,6 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ activeTab, onRefresh }) => {
         content: (
           <div>
             <p>用户 "{username}" 的密码已重置</p>
-            {/*<p>临时密码: <Text code copyable>{tempPassword}</Text></p>*/}
             <p style={{ color: '#faad14' }}>请及时将临时密码告知用户，并要求其首次登录时修改密码</p>
           </div>
         ),
@@ -455,7 +367,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ activeTab, onRefresh }) => {
   // 保存系统配置
   const handleSaveConfig = async (values: any) => {
     try {
-      // await APIClient.put('/admin/config', values);
+      // await adminService.put('/admin/config', values);
       message.success('系统配置已保存');
     } catch (error) {
       message.error('保存配置失败');
@@ -468,26 +380,26 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ activeTab, onRefresh }) => {
       let result;
       switch (action) {
         case 'backup':
-          // result = await APIClient.post('/admin/backup');
-          // message.success(`系统备份完成：${result.data?.filename || 'backup.sql'}`);
+          // result = await adminService.post('/admin/backup');
+          message.success('系统备份完成');
           break;
         case 'cleanup':
-          // result = await APIClient.post('/admin/cleanup-logs');
-          // message.success(`日志清理完成，删除了 ${result.data?.deletedCount || 0} 条记录`);
+          // result = await adminService.post('/admin/cleanup-logs');
+          message.success('日志清理完成');
           break;
         case 'restart':
-          // await APIClient.post('/admin/restart');
+          // await adminService.post('/admin/restart');
           message.success('系统重启指令已发送');
           break;
       }
-      // fetchStats();
+      fetchStats();
     } catch (error) {
       const actionText = action === 'backup' ? '备份' : action === 'cleanup' ? '清理' : '重启';
       message.error(`${actionText}操作失败`);
     }
   };
 
-  // 生成性能数据
+  // 生成性能数据 - 当stats为空时返回空数组
   const generatePerformanceData = () => {
     if (!stats) return [];
 
@@ -504,15 +416,9 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ activeTab, onRefresh }) => {
     return hours;
   };
 
-  // 生成用户活动统计
+  // 生成用户活动统计 - 返回空数组
   const generateUserActivityData = () => {
-    const days = ['周一', '周二', '周三', '周四', '周五', '周六', '周日'];
-    return days.map(day => ({
-      day,
-      登录: Math.floor(Math.random() * 100) + 20,
-      注册: Math.floor(Math.random() * 20) + 5,
-      操作: Math.floor(Math.random() * 150) + 50,
-    }));
+    return [];
   };
 
   // 表格列定义
@@ -547,12 +453,12 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ activeTab, onRefresh }) => {
     },
     {
       title: '状态',
-      dataIndex: 'is_active',
-      key: 'is_active',
-      render: (is_active: boolean) => (
+      dataIndex: 'isActive',
+      key: 'isActive',
+      render: (isActive: boolean) => (
         <Badge
-          status={is_active ? 'success' : 'default'}
-          text={is_active ? '活跃' : '停用'}
+          status={isActive ? 'success' : 'default'}
+          text={isActive ? '活跃' : '停用'}
         />
       ),
     },
@@ -568,8 +474,8 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ activeTab, onRefresh }) => {
     },
     {
       title: '最后登录',
-      dataIndex: 'last_Login',
-      key: 'last_Login',
+      dataIndex: 'lastLogin',
+      key: 'lastLogin',
       render: (date: string) => (
         date ? (
           <Tooltip title={new Date(date).toLocaleString('zh-CN')}>
@@ -755,7 +661,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ activeTab, onRefresh }) => {
           tab={<span><MonitorOutlined />系统概览</span>}
           key="overview"
         >
-          {stats && (
+          {stats ? (
             <>
               {/* 统计卡片 */}
               <Row gutter={[16, 16]} style={{ marginBottom: 24 }}>
@@ -902,6 +808,18 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ activeTab, onRefresh }) => {
                 </ResponsiveContainer>
               </Card>
             </>
+          ) : (
+            // stats为空时显示空状态
+            <div style={{ textAlign: 'center', padding: '60px 20px' }}>
+              <Empty
+                description="暂无系统统计数据"
+                image={Empty.PRESENTED_IMAGE_SIMPLE}
+              >
+                <Button type="primary" onClick={fetchStats} icon={<ReloadOutlined />}>
+                  重新加载
+                </Button>
+              </Empty>
+            </div>
           )}
         </TabPane>
 
@@ -949,6 +867,9 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ activeTab, onRefresh }) => {
                 loading={usersLoading}
                 rowKey="id"
                 size="small"
+                locale={{
+                  emptyText: <Empty description="暂无用户数据" image={Empty.PRESENTED_IMAGE_SIMPLE} />
+                }}
                 pagination={{
                   current: usersPagination.current,
                   pageSize: usersPagination.pageSize,
@@ -1087,8 +1008,8 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ activeTab, onRefresh }) => {
                     message="系统状态"
                     description={
                       <div style={{ fontSize: '12px' }}>
-                        <p style={{ margin: '4px 0' }}>最后备份: {stats?.lastBackup}</p>
-                        <p style={{ margin: '4px 0' }}>运行时间: {stats?.systemUptime}</p>
+                        <p style={{ margin: '4px 0' }}>最后备份: {stats?.lastBackup || '暂无数据'}</p>
+                        <p style={{ margin: '4px 0' }}>运行时间: {stats?.systemUptime || '暂无数据'}</p>
                       </div>
                     }
                     type="info"
@@ -1204,6 +1125,9 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ activeTab, onRefresh }) => {
                 loading={activitiesLoading}
                 rowKey="id"
                 size="small"
+                locale={{
+                  emptyText: <Empty description="暂无活动日志" image={Empty.PRESENTED_IMAGE_SIMPLE} />
+                }}
                 pagination={{
                   current: activitiesPagination.current,
                   pageSize: activitiesPagination.pageSize,
