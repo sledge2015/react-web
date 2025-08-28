@@ -1,4 +1,4 @@
-// src/pages/Portfolio/index.tsx - 支持交易操作的投资组合页面
+// src/pages/Portfolio/index.tsx - 修复后的投资组合页面
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   Card,
@@ -13,7 +13,6 @@ import {
   message,
   Spin,
   Empty,
-  Tooltip,
   Modal,
   Form,
   AutoComplete,
@@ -21,7 +20,7 @@ import {
   DatePicker,
   Tag,
   Dropdown,
-  Collapse,
+  MenuProps,
 } from 'antd';
 import {
   DollarOutlined,
@@ -35,7 +34,6 @@ import {
   DownOutlined,
   MoreOutlined,
   ShoppingCartOutlined,
-  // SellOutlined,
 } from '@ant-design/icons';
 import {
   Bar,
@@ -50,70 +48,58 @@ import {
   Cell,
   Legend,
 } from 'recharts';
-import { APIClient } from '../../hooks/useAuth';
-import { SortOrder } from 'antd/es/table/interface';
 import dayjs from 'dayjs';
-
+import { stockService, UserStock, StockSearchResult, PortfolioSummary, Transaction } from '../../services/stockService';
 const { Title, Text } = Typography;
-const { Panel } = Collapse;
 
 // 接口定义
-interface Stock {
-  id: string;
-  symbol: string;
-  companyName: string;
-  price: number;
-  change: number;
-  changePercent: number;
-  volume: number;
-  marketCap: number;
-  lastUpdated: string;
-}
+// interface Stock {
+//   id: string;
+//   symbol: string;
+//   companyName: string;
+//   price: number;
+//   change: number;
+//   changePercent: number;
+//   volume: number;
+//   marketCap: number;
+//   lastUpdated: string;
+// }
 
-interface Transaction {
-  id: string;
-  type: 'buy' | 'sell';
-  date: string;
-  price: number;
-  quantity: number;
-  totalAmount: number;
-  profit?: number;
-  profitPercent?: number;
-}
 
-interface UserStock {
-  id: string;
-  symbol: string;
-  addedAt: string;
-  notes?: string;
-  quantity?: number;
-  alertPrice?: number;
-  currentValue?: number;
-  totalInvestment?: number;
-  weight?: number;
-  totalProfit?: number;
-  profitPercent?: number;
-  transactions?: Transaction[];
-  stock: Stock;
-}
 
-interface PortfolioSummary {
-  totalValue: number;
-  totalInvestment: number;
-  totalGainLoss: number;
-  totalGainLossPercent: number;
-  stockCount: number;
-  total_investment_cash: number;
-  total_interest: number;
-  total_profit: number;
-  invest_profit_percent: number;
-}
+// interface UserStock {
+//   id: string;
+//   symbol: string;
+//   addedAt: string;
+//   notes?: string;
+//   quantity?: number;
+//   alertPrice?: number;
+//   currentValue?: number;
+//   totalInvestment?: number;
+//   weight?: number;
+//   totalProfit?: number;
+//   profitPercent?: number;
+//   transactions?: Transaction[];
+//   stock: Stock;
+// }
 
-interface StockSearchResult {
-  symbol: string;
-  name: string;
-  type: string;
-}
+// interface PortfolioSummary {
+//   totalValue: number;
+//   totalInvestment: number;
+//   totalGainLoss: number;
+//   totalGainLossPercent: number;
+//   stockCount: number;
+//   total_investment_cash: number;
+//   total_interest: number;
+//   total_profit: number;
+//   invest_profit_percent: number;
+// }
+
+// interface StockSearchResult {
+//   symbol: string;
+//   name: string;
+//   type: string;
+// }
 
 // 颜色配置
 const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884D8'];
@@ -132,110 +118,119 @@ const PortfolioPage: React.FC<PortfolioPageProps> = ({ onRefresh }) => {
   const [modalVisible, setModalVisible] = useState(false);
   const [tradeModalVisible, setTradeModalVisible] = useState(false);
   const [tradeType, setTradeType] = useState<'buy' | 'sell'>('buy');
+
   const [form] = Form.useForm();
   const [tradeForm] = Form.useForm();
+
+  const [sortField, setSortField] = useState<string | null>(null);
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc' | null>(null);
+  const [visualizationVisible, setVisualizationVisible] = useState(false);
 
   // 获取用户股票列表
   const fetchUserStocks = useCallback(async () => {
     try {
-      const response = await APIClient.get('/stocks/user');
-      if (response.success) {
-        setUserStocks(response.data || []);
+      const response = await stockService.getUserStocks()
+      if (response) {
+        const stockData = response as UserStock[];
+        // 如果API返回空数据，使用模拟数据
+        if (!stockData || stockData.length === 0) {
+          setUserStocks([
+            {
+              id: 'us-1',
+              symbol: 'GOVX',
+              addedAt: '2024-01-15T00:00:00.000Z',
+              notes: 'Geovax Labs Inc',
+              quantity: 1463,
+              weight: 45,
+              totalProfit: -1893.09,
+              profitPercent: -63.10,
+              transactions: [
+                {
+                  id: 't1',
+                  type: 'buy',
+                  date: '2024-10-10',
+                  price: 2.61,
+                  quantity: 963,
+                  totalAmount: 1788.68,
+                  profit: -1370.37,
+                  profitPercent: -71.06
+                },
+                {
+                  id: 't2',
+                  type: 'buy',
+                  date: '2025-06-18',
+                  price: 1.18,
+                  quantity: 500,
+                  totalAmount: 211.70,
+                  profit: -169.70,
+                  profitPercent: -35.88
+                }
+              ],
+              stock: {
+                id: 'stock-govx',
+                symbol: 'GOVX',
+                companyName: 'Geovax Labs Inc',
+                price: 0.76,
+                change: -0.13,
+                changePercent: -14.61,
+                volume: 52467890,
+                marketCap: 2750000000,
+                lastUpdated: new Date().toISOString(),
+              },
+            },
+            {
+              id: 'us-2',
+              symbol: 'GOOGL',
+              addedAt: '2024-01-20T00:00:00.000Z',
+              notes: 'Google母公司',
+              quantity: 50,
+              weight: 35,
+              totalProfit: -372,
+              profitPercent: -4.96,
+              transactions: [
+                {
+                  id: 't3',
+                  type: 'buy',
+                  date: '2024-01-20',
+                  price: 150.00,
+                  quantity: 50,
+                  totalAmount: 7500,
+                  profit: -372,
+                  profitPercent: -4.96
+                }
+              ],
+              stock: {
+                id: 'stock-googl',
+                symbol: 'GOOGL',
+                companyName: 'Alphabet Inc.',
+                price: 142.56,
+                change: -1.23,
+                changePercent: -0.86,
+                volume: 25789123,
+                marketCap: 1800000000000,
+                lastUpdated: new Date().toISOString(),
+              },
+            }
+          ]);
+        } else {
+          setUserStocks(stockData);
+          console.log("获取股票值不为空:",stockData)
+        }
       }
     } catch (error) {
       console.error('获取股票列表失败:', error);
+      message.error('获取股票列表失败，使用模拟数据');
       // 使用模拟数据作为后备
-      setUserStocks([
-        {
-          id: 'us-1',
-          symbol: 'GOVX',
-          addedAt: '2024-01-15T00:00:00.000Z',
-          notes: 'Geovax Labs Inc',
-          quantity: 1463,
-          currentValue: 1106.91,
-          totalInvestment: 3000,
-          weight: 0.45,
-          totalProfit: -1893.09,
-          profitPercent: -63.10,
-          transactions: [
-            {
-              id: 't1',
-              type: 'buy',
-              date: '2024-10-10',
-              price: 2.61,
-              quantity: 963,
-              totalAmount: 1788.68,
-              profit: -1370.37,
-              profitPercent: -71.06
-            },
-            {
-              id: 't2',
-              type: 'buy',
-              date: '2025-06-18',
-              price: 1.18,
-              quantity: 500,
-              totalAmount: 211.70,
-              profit: -169.70,
-              profitPercent: -35.88
-            }
-          ],
-          stock: {
-            id: 'stock-govx',
-            symbol: 'GOVX',
-            companyName: 'Geovax Labs Inc',
-            price: 0.76,
-            change: -13.75,
-            changePercent: -1.23,
-            volume: 52467890,
-            marketCap: 2750000000000,
-            lastUpdated: new Date().toISOString(),
-          },
-        },
-        {
-          id: 'us-2',
-          symbol: 'GOOGL',
-          addedAt: '2024-01-20T00:00:00.000Z',
-          notes: 'Google母公司',
-          quantity: 50,
-          currentValue: 7128,
-          totalInvestment: 7500,
-          weight: 0.35,
-          totalProfit: -372,
-          profitPercent: -4.96,
-          transactions: [
-            {
-              id: 't3',
-              type: 'buy',
-              date: '2024-01-20',
-              price: 150.00,
-              quantity: 50,
-              totalAmount: 7500,
-              profit: -372,
-              profitPercent: -4.96
-            }
-          ],
-          stock: {
-            id: 'stock-googl',
-            symbol: 'GOOGL',
-            companyName: 'Alphabet Inc.',
-            price: 142.56,
-            change: -1.23,
-            changePercent: -0.86,
-            volume: 25789123,
-            marketCap: 1800000000000,
-            lastUpdated: new Date().toISOString(),
-          },
-        }
-      ]);
+      setUserStocks([]);
     }
   }, []);
 
-  // 获取投资组合汇总 - 保持不变
+  // 获取投资组合汇总
   const fetchPortfolioSummary = useCallback(async () => {
     try {
-      const response = await APIClient.get('/stocks/portfolio/summary');
-      if (response.success) {
-        setPortfolioSummary(response.data);
+      const response = await stockService.getPortfolioSummary()
+      if (response) {
+        // setPortfolioSummary(response as PortfolioSummary);
       }
     } catch (error) {
       console.error('获取投资组合汇总失败:', error);
@@ -253,7 +248,7 @@ const PortfolioPage: React.FC<PortfolioPageProps> = ({ onRefresh }) => {
     }
   }, []);
 
-  // 搜索股票 - 保持不变
+  // 搜索股票
   const handleSearch = async (value: string) => {
     if (!value.trim()) {
       setSearchResults([]);
@@ -261,19 +256,20 @@ const PortfolioPage: React.FC<PortfolioPageProps> = ({ onRefresh }) => {
     }
     try {
       setSearchLoading(true);
-      const response = await APIClient.get(`/stocks/search?q=${encodeURIComponent(value)}`);
-      if (response.success) {
-        setSearchResults(response.data || []);
+      const response = await stockService.searchStocks(value);
+      if (response) {
+        // setSearchResults((response.data as StockSearchResult[]) || []);
       }
     } catch (error) {
       console.error('搜索股票失败:', error);
-      setSearchResults([
-        { symbol: 'AAPL', name: 'Apple Inc.', type: 'Equity' },
-        { symbol: 'GOOGL', name: 'Alphabet Inc.', type: 'Equity' },
-        { symbol: 'MSFT', name: 'Microsoft Corporation', type: 'Equity' },
-        { symbol: 'TSLA', name: 'Tesla Inc.', type: 'Equity' },
-        { symbol: 'AMZN', name: 'Amazon.com Inc.', type: 'Equity' },
-      ].filter(stock =>
+      const fallbackResults: StockSearchResult[] = [
+        // { symbol: 'AAPL', name: 'Apple Inc.', type: 'Equity' },
+        // { symbol: 'GOOGL', name: 'Alphabet Inc.', type: 'Equity' },
+        // { symbol: 'MSFT', name: 'Microsoft Corporation', type: 'Equity' },
+        // { symbol: 'TSLA', name: 'Tesla Inc.', type: 'Equity' },
+        // { symbol: 'AMZN', name: 'Amazon.com Inc.', type: 'Equity' },
+      ];
+      setSearchResults(fallbackResults.filter(stock =>
         stock.symbol.toLowerCase().includes(value.toLowerCase()) ||
         stock.name.toLowerCase().includes(value.toLowerCase())
       ));
@@ -282,15 +278,291 @@ const PortfolioPage: React.FC<PortfolioPageProps> = ({ onRefresh }) => {
     }
   };
 
-  // 添加股票 - 保持不变
+  // 排序功能
+  const handleSort = (field: string) => {
+    const newOrder = sortField === field && sortOrder === 'asc' ? 'desc' : 'asc';
+    setSortField(field);
+    setSortOrder(newOrder);
+
+    const sortedStocks = [...userStocks].sort((a, b) => {
+      let aValue: any;
+      let bValue: any;
+
+      switch (field) {
+        case 'symbol':
+          aValue = a.symbol;
+          bValue = b.symbol;
+          break;
+        case 'name':
+          aValue = a.stock.companyName;
+          bValue = b.stock.companyName;
+          break;
+        case 'price':
+          aValue = a.stock.price;
+          bValue = b.stock.price;
+          break;
+        case 'quantity':
+          aValue = a.quantity || 0;
+          bValue = b.quantity || 0;
+          break;
+        case 'dailyProfit':
+          aValue = a.stock.change * (a.quantity || 0);
+          bValue = b.stock.change * (b.quantity || 0);
+          break;
+        case 'totalProfit':
+          aValue = a.totalProfit || 0;
+          bValue = b.totalProfit || 0;
+          break;
+        case 'profitPercent':
+          aValue = a.profitPercent || 0;
+          bValue = b.profitPercent || 0;
+          break;
+        default:
+          return 0;
+      }
+
+      if (typeof aValue === 'string' && typeof bValue === 'string') {
+        return newOrder === 'asc'
+          ? aValue.localeCompare(bValue)
+          : bValue.localeCompare(aValue);
+      } else {
+        return newOrder === 'asc' ? aValue - bValue : bValue - aValue;
+      }
+    });
+
+    setUserStocks(sortedStocks);
+  };
+
+  // 获取可排序的列名
+  const getSortableColumns = () => [
+    { key: 'symbol', label: '代号' },
+    { key: 'name', label: '名称' },
+    { key: 'price', label: '价格' },
+    { key: 'quantity', label: '数量' },
+    { key: 'dailyProfit', label: '日收益' },
+    { key: 'totalProfit', label: '总收益' },
+    { key: 'profitPercent', label: '收益率' },
+  ];
+
+  // 生成热力图数据
+  const generateHeatmapData = () => {
+    if (!userStocks.length) return [];
+
+    // 计算总投资价值用于相对大小
+    const maxValue = Math.max(...userStocks.map(stock => stock.weight || 0));
+    const minValue = Math.min(...userStocks.map(stock => stock.weight || 0));
+    const valueRange = maxValue - minValue;
+
+    return userStocks.map(stock => {
+      const currentValue = stock.weight || 0;
+      const profitPercent = stock.profitPercent || 0;
+      const dailyChange = stock.stock.changePercent || 0;
+
+      // 计算相对大小 (20% - 100%)
+      const sizeRatio = valueRange > 0
+        ? 0.2 + 0.8 * ((currentValue - minValue) / valueRange)
+        : 0.6;
+
+      // 根据收益率确定颜色
+      let colorIntensity: 'light' | 'medium' | 'dark';
+      let colorType: 'profit' | 'loss' | 'neutral';
+
+      if (Math.abs(dailyChange) >= 3) {
+        colorIntensity = 'dark';
+      } else if (Math.abs(dailyChange) >= 1) {
+        colorIntensity = 'medium';
+      } else {
+        colorIntensity = 'light';
+      }
+
+      if (dailyChange > 0) {
+        colorType = 'profit';
+      } else if (dailyChange < 0) {
+        colorType = 'loss';
+      } else {
+        colorType = 'neutral';
+      }
+
+      return {
+        symbol: stock.symbol,
+        currentValue,
+        profitPercent,
+        dailyChange,
+        sizeRatio,
+        colorIntensity,
+        colorType,
+        totalProfit: stock.totalProfit || 0,
+        quantity: stock.quantity || 0,
+        companyName: stock.stock.companyName,
+      };
+    });
+  };
+
+  // 获取热力图颜色
+  const getHeatmapColor = (colorType: 'profit' | 'loss' | 'neutral', intensity: 'light' | 'medium' | 'dark') => {
+    const colors = {
+      profit: {
+        light: '#b7eb8f',
+        medium: '#73d13d',
+        dark: '#389e0d',
+      },
+      loss: {
+        light: '#ffaaa5',
+        medium: '#ff7875',
+        dark: '#ff4d4f',
+      },
+      neutral: {
+        light: '#d9d9d9',
+        medium: '#bfbfbf',
+        dark: '#8c8c8c',
+      }
+    };
+    return colors[colorType][intensity];
+  };
+
+  // 热力图组件
+  const HeatmapVisualization = () => {
+    const heatmapData = generateHeatmapData();
+
+    if (heatmapData.length === 0) {
+      return <Empty description="暂无投资数据" />;
+    }
+
+    return (
+      <div style={{ padding: '20px' }}>
+        <div style={{ marginBottom: '16px' }}>
+          <Title level={4}>直观呈现您的投资信息</Title>
+          <Text type="secondary">
+            每个方框的大小表示投资组合中相应投资的总价值，颜色表示当天的收益。
+          </Text>
+        </div>
+
+        {/* 颜色图例 */}
+        <div style={{ marginBottom: '20px', textAlign: 'right' }}>
+          <Text strong style={{ marginRight: '10px' }}>日变化百分比</Text>
+          <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+            {[
+              { label: '≤ -3', color: '#ff4d4f' },
+              { label: '-2', color: '#ff7875' },
+              { label: '-1', color: '#ffaaa5' },
+              { label: '0', color: '#d9d9d9' },
+              { label: '+1', color: '#ffaaa5' },
+              { label: '+2', color: '#73d13d' },
+              { label: '≥ 3', color: '#389e0d' },
+            ].map((item, index) => (
+              <div key={index} style={{ textAlign: 'center' }}>
+                <div
+                  style={{
+                    width: '20px',
+                    height: '12px',
+                    backgroundColor: item.color,
+                    marginBottom: '2px'
+                  }}
+                />
+                <Text style={{ fontSize: '10px' }}>{item.label}</Text>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* 热力图网格 */}
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))',
+            gap: '8px',
+            maxHeight: '400px',
+            overflow: 'hidden'
+          }}
+        >
+          {heatmapData.map((item) => {
+            const baseSize = 120;
+            const width = Math.max(baseSize * item.sizeRatio, 60);
+            const height = Math.max(80 * item.sizeRatio, 50);
+
+            return (
+              <div
+                key={item.symbol}
+                style={{
+                  width: `${width}px`,
+                  height: `${height}px`,
+                  backgroundColor: getHeatmapColor(item.colorType, item.colorIntensity),
+                  border: '1px solid rgba(0,0,0,0.1)',
+                  borderRadius: '4px',
+                  padding: '8px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  justifyContent: 'center',
+                  alignItems: 'center',
+                  cursor: 'pointer',
+                  transition: 'transform 0.2s, box-shadow 0.2s',
+                  fontSize: width < 100 ? '12px' : '14px',
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.transform = 'scale(1.05)';
+                  e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.15)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.transform = 'scale(1)';
+                  e.currentTarget.style.boxShadow = 'none';
+                }}
+                onClick={() => {
+                  const stock = userStocks.find(s => s.symbol === item.symbol);
+                  if (stock) handleViewStock(stock);
+                }}
+              >
+                <div style={{
+                  fontWeight: 'bold',
+                  fontSize: width < 100 ? '14px' : '18px',
+                  color: '#000',
+                  textAlign: 'center'
+                }}>
+                  {item.symbol}
+                </div>
+                <div style={{
+                  fontSize: width < 100 ? '11px' : '13px',
+                  color: '#333',
+                  textAlign: 'center',
+                  marginTop: '4px'
+                }}>
+                  {item.dailyChange >= 0 ? '+' : ''}{item.dailyChange.toFixed(2)}%
+                </div>
+                {width > 100 && (
+                  <div style={{
+                    fontSize: '10px',
+                    color: '#666',
+                    textAlign: 'center',
+                    marginTop: '2px'
+                  }}>
+                    ${item.currentValue.toFixed(0)}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  };
+
+  //显示排序
+  const getSortDisplayText = () => {
+    const currentColumn = getSortableColumns().find(col => col.key === sortField);
+    const orderText = sortOrder === 'asc' ? '升序' : '降序';
+    return `按${currentColumn?.label || '代号'}排序 (${orderText})`;
+  };
+
+  //添加股票
   const handleAddStock = async (symbol: string) => {
     try {
-      const response = await APIClient.post('/stocks/user', { symbol });
-      if (response.success) {
-        setUserStocks(prev => [...prev, response.data]);
-        setSearchResults([]);
+      const response = await stockService.addUserStock(symbol);
+      if (response) {
         message.success(`已添加 ${symbol} 到您的投资组合`);
-        fetchPortfolioSummary();
+        setSearchResults([]);
+        // 将新股票添加到列表中
+        // const newStock = response.data as UserStock;
+        // setUserStocks(prev => [...prev, newStock]);
+        // fetchPortfolioSummary();
       }
     } catch (error) {
       message.error('添加股票失败');
@@ -305,21 +577,23 @@ const PortfolioPage: React.FC<PortfolioPageProps> = ({ onRefresh }) => {
       symbol: stock.symbol,
       type: 'buy',
       price: stock.stock.price,
+      quantity: 1,
       date: dayjs(),
     });
     setTradeModalVisible(true);
   };
 
   // 卖出股票
-  const handleSellStock = (stock: UserStock) => {
-    setSelectedStock(stock);
+  const handleSellStock = (transaction: Transaction) => {
+    // setSelectedStock(stock);
     setTradeType('sell');
     tradeForm.setFieldsValue({
-      symbol: stock.symbol,
+      symbol: transaction.symbol,
       type: 'sell',
-      price: stock.stock.price,
+      price: transaction.price,
+      quantity: 1,
       date: dayjs(),
-      maxQuantity: stock.quantity
+      maxQuantity: transaction.quantity
     });
     setTradeModalVisible(true);
   };
@@ -334,34 +608,32 @@ const PortfolioPage: React.FC<PortfolioPageProps> = ({ onRefresh }) => {
         date: values.date.format('YYYY-MM-DD'),
         totalAmount: values.price * values.quantity
       };
+      // const response = await stockService.getTrendingStocks(20)
 
-      const response = await APIClient.post(`/stocks/user/${selectedStock.id}/trade`, tradeData);
-
-      if (response.success) {
-        message.success(`${tradeType === 'buy' ? '买入' : '卖出'}操作成功`);
-        setTradeModalVisible(false);
-        tradeForm.resetFields();
-        fetchUserStocks();
-        fetchPortfolioSummary();
-      }
+      // if (response) {
+      //   message.success(`${tradeType === 'buy' ? '买入' : '卖出'}操作成功`);
+      //   setTradeModalVisible(false);
+      //   tradeForm.resetFields();
+      //   fetchUserStocks();
+      //   fetchPortfolioSummary();
+      // }
     } catch (error) {
       message.error(`${tradeType === 'buy' ? '买入' : '卖出'}操作失败`);
     }
   };
 
-  // 删除股票 - 保持不变
-  const handleRemoveStock = async (userStockId: string, symbol: string) => {
+  // 删除股票
+  const handleRemoveStock = async (userStockId: string) => {
     try {
-      await APIClient.delete(`/stocks/user/${userStockId}`);
+      await stockService.removeUserStock(userStockId)
       setUserStocks(prev => prev.filter(stock => stock.id !== userStockId));
-      message.success(`已从投资组合中移除 ${symbol}`);
       fetchPortfolioSummary();
     } catch (error) {
       message.error('删除股票失败');
     }
   };
 
-  // 查看股票详情 - 保持不变
+  // 查看股票详情
   const handleViewStock = (stock: UserStock) => {
     setSelectedStock(stock);
     form.setFieldsValue({
@@ -371,11 +643,11 @@ const PortfolioPage: React.FC<PortfolioPageProps> = ({ onRefresh }) => {
     setModalVisible(true);
   };
 
-  // 更新股票信息 - 保持不变
+  // 更新股票信息
   const handleUpdateStock = async (values: any) => {
     if (!selectedStock) return;
     try {
-      await APIClient.put(`/stocks/user/${selectedStock.id}`, values);
+      // await APIClient.put(`/stocks/user/${selectedStock.id}`, values);
       setUserStocks(prev =>
         prev.map(stock =>
           stock.id === selectedStock.id
@@ -390,16 +662,18 @@ const PortfolioPage: React.FC<PortfolioPageProps> = ({ onRefresh }) => {
     }
   };
 
-  // 刷新所有数据 - 保持不变
+  // 刷新所有数据
   const refreshAllData = useCallback(async () => {
+    setLoading(true);
     await Promise.all([
       fetchUserStocks(),
       fetchPortfolioSummary(),
     ]);
+    setLoading(false);
     message.success('投资组合数据已刷新');
   }, [fetchUserStocks, fetchPortfolioSummary]);
 
-  // 初始化数据 - 保持不变
+  // 初始化数据
   useEffect(() => {
     const initializeData = async () => {
       try {
@@ -418,18 +692,8 @@ const PortfolioPage: React.FC<PortfolioPageProps> = ({ onRefresh }) => {
     initializeData();
   }, [fetchUserStocks, fetchPortfolioSummary]);
 
-  // 监听全局刷新事件 - 保持不变
-  useEffect(() => {
-    const handleGlobalRefresh = () => {
-      refreshAllData();
-    };
-
-    window.addEventListener('refreshData', handleGlobalRefresh);
-    return () => window.removeEventListener('refreshData', handleGlobalRefresh);
-  }, [refreshAllData]);
-
   // 格式化价格
-  const formatPrice = (price: number) => `${price.toFixed(2)}`;
+  const formatPrice = (price: number) => `$${price.toFixed(2)}`;
 
   // 格式化变化
   const formatChange = (change: number, changePercent: number) => {
@@ -438,7 +702,7 @@ const PortfolioPage: React.FC<PortfolioPageProps> = ({ onRefresh }) => {
     const color = isPositive ? '#52c41a' : '#ff4d4f';
     return (
       <span style={{ color }}>
-        {sign} {change.toFixed(2)} ({changePercent.toFixed(2)}%)
+        {sign} {Math.abs(change).toFixed(2)} ({Math.abs(changePercent).toFixed(2)}%)
       </span>
     );
   };
@@ -476,7 +740,7 @@ const PortfolioPage: React.FC<PortfolioPageProps> = ({ onRefresh }) => {
         width: 120,
         render: (_: any, record: Transaction) => (
           <span style={{ color: (record.profit || 0) >= 0 ? '#52c41a' : '#ff4d4f' }}>
-            {formatPrice(record.profit || 0)} ▼ {(record.profitPercent || 0).toFixed(2)}%
+            {formatPrice(record.profit || 0)} ({(record.profitPercent || 0).toFixed(2)}%)
           </span>
         ),
       },
@@ -490,12 +754,34 @@ const PortfolioPage: React.FC<PortfolioPageProps> = ({ onRefresh }) => {
         title: '',
         key: 'actions',
         width: 40,
-        render: () => (
-          <Button type="text" size="small" icon={<MoreOutlined />} />
-        ),
+           render: (_: any, record: Transaction) => {
+              const menuItems: MenuProps['items'] = [
+                {
+                  key: 'sell',
+                  label: '卖出',
+                  icon: <FallOutlined />,
+                  onClick: () => handleSellStock(record),
+                },
+                {
+                  key: 'delete',
+                  label: '删除',
+                  icon: <DeleteOutlined />,
+                  danger: true,
+                  onClick: () => handleRemoveStock(record.id),
+                },
+              ];
+
+              return (
+                <Dropdown
+                  menu={{ items: menuItems }}
+                  trigger={['click']}
+                >
+                  <Button type="text" icon={<MoreOutlined />} />
+                </Dropdown>
+                );
+            },
       },
     ];
-
     return (
       <Table
         columns={transactionColumns}
@@ -508,29 +794,25 @@ const PortfolioPage: React.FC<PortfolioPageProps> = ({ onRefresh }) => {
     );
   };
 
-  // 股票表格列 - 修改为支持展开的格式
+  // 股票表格列
   const stockColumns = [
     {
       title: '代号',
       dataIndex: 'symbol',
       key: 'symbol',
-      width: 100,
-      render: (symbol: string, record: UserStock) => (
-        <Space direction="vertical" size={0}>
-          <Tag color="blue" style={{ fontSize: '12px', fontWeight: 'bold' }}>
-            {symbol}
-          </Tag>
-        </Space>
+      width: 70,
+      render: (symbol: string) => (
+        <Tag color="blue" style={{ fontSize: '12px', fontWeight: 'bold' }}>
+          {symbol}
+        </Tag>
       ),
     },
     {
       title: '名称',
       key: 'name',
-      width: 200,
+      width: 180,
       render: (_: any, record: UserStock) => (
-        <Space direction="vertical" size={0}>
-          <Text strong style={{ fontSize: '14px' }}>{record.stock.companyName}</Text>
-        </Space>
+        <Text strong style={{ fontSize: '12px' }}>{record.stock.companyName}</Text>
       ),
     },
     {
@@ -563,103 +845,83 @@ const PortfolioPage: React.FC<PortfolioPageProps> = ({ onRefresh }) => {
         const dailyProfit = record.stock.change * (record.quantity || 0);
         const isPositive = dailyProfit >= 0;
         return (
-          <Space direction="vertical" size={0}>
-            <span style={{ color: isPositive ? '#52c41a' : '#ff4d4f' }}>
-              {isPositive ? '▲' : '▼'} {Math.abs(dailyProfit).toFixed(2)}
-            </span>
-          </Space>
+          <span style={{ color: isPositive ? '#52c41a' : '#ff4d4f' }}>
+            {isPositive ? '▲' : '▼'} {formatPrice(Math.abs(dailyProfit))}
+          </span>
         );
       },
     },
     {
+      title: '总收益',
+      key: 'totalProfit',
+      width: 120,
+      render: (_: any, record: UserStock) => (
+        <span style={{ color: (record.totalProfit || 0) >= 0 ? '#52c41a' : '#ff4d4f' }}>
+          {formatPrice(record.totalProfit || 0)} ({(record.profitPercent || 0).toFixed(2)}%)
+        </span>
+      ),
+    },
+    {
       title: '股价',
-      dataIndex: ['stock', 'price'],
-      key: 'stockPrice',
-      width: 100,
-      render: (price: number) => formatPrice(price),
+      key: 'totalProfit',
+      width: 120,
+      render: (_: any, record: UserStock) => (
+        <span style={{ color: (record.totalProfit || 0) >= 0 ? '#52c41a' : '#ff4d4f' }}>
+          {formatPrice(record.totalProfit || 0)} ({(record.profitPercent || 0).toFixed(2)}%)
+        </span>
+      ),
     },
     {
       title: '',
       key: 'actions',
       width: 50,
-      render: (_: any, record: UserStock) => (
-        <Dropdown
-          menu={{
-            items: [
-              {
-                key: 'buy',
-                label: '买入',
-                icon: <ShoppingCartOutlined />,
-                onClick: () => handleBuyStock(record),
-              },
-              {
-                key: 'sell',
-                label: '卖出',
-                icon: <FallOutlined />,
-                onClick: () => handleSellStock(record),
-              },
-              {
-                key: 'view',
-                label: '查看',
-                icon: <EyeOutlined />,
-                onClick: () => handleViewStock(record),
-              },
-              {
-                key: 'delete',
-                label: '删除',
-                icon: <DeleteOutlined />,
-                danger: true,
-                onClick: () => handleRemoveStock(record.id, record.symbol),
-              },
-            ],
-          }}
-          trigger={['click']}
-        >
-          <Button type="text" icon={<MoreOutlined />} />
-        </Dropdown>
-      ),
+      render: (_: any, record: UserStock) => {
+        const menuItems: MenuProps['items'] = [
+          {
+            key: 'buy',
+            label: '买入',
+            icon: <ShoppingCartOutlined />,
+            onClick: () => handleBuyStock(record),
+          },
+          {
+            key: 'view',
+            label: '查看',
+            icon: <EyeOutlined />,
+            onClick: () => handleViewStock(record),
+          },
+          {
+            key: 'delete',
+            label: '删除',
+            icon: <DeleteOutlined />,
+            danger: true,
+            onClick: () => handleRemoveStock(record.id),
+          },
+        ];
+
+        return (
+          <Dropdown
+            menu={{ items: menuItems }}
+            trigger={['click']}
+          >
+            <Button type="text" icon={<MoreOutlined />} />
+          </Dropdown>
+        );
+      },
     },
   ];
 
-  // 生成投资组合数据 - 保持不变
+  // 生成投资组合数据
   const generatePortfolioData = () => {
-    let totalValue = 0;
-    let totalCost = 0;
-
-    const stockContributions = userStocks.map(stock => {
-      const currentValue = stock.currentValue || 0;
-      const investment = stock.totalInvestment || 0;
-      const profitLoss = currentValue - investment;
-      const weight = stock.weight || 0;
-
-      totalValue += currentValue;
-      totalCost += investment;
-
-      return {
-        symbol: stock.symbol,
-        profitLoss: profitLoss,
-        profitLossPercent: investment > 0 ? (profitLoss / investment * 100) : 0,
-        weight: weight,
-        contribution: profitLoss * weight / 100,
-        currentValue: currentValue,
-        investment: investment
-      };
-    });
-
-    const totalProfitLoss = totalValue - totalCost;
-    const totalProfitLossPercent = totalCost > 0 ? (totalProfitLoss / totalCost * 100) : 0;
-
-    return {
-      stocks: stockContributions,
-      total: {
-        profitLoss: totalProfitLoss,
-        profitLossPercent: totalProfitLossPercent,
-        totalValue,
-        totalCost
-      }
-    };
+    return userStocks.map(stock => ({
+      symbol: stock.symbol,
+      profitLossPercent: stock.profitPercent || 0,
+      currentValue: stock.profitPercent || 0,
+      investment: stock.profitPercent || 0,
+      weight: stock.weight || 0,
+    }));
   };
 
+  // 生成饼图数据
   const generatePieData = () => {
     return userStocks.map((stock, index) => ({
       name: stock.symbol,
@@ -675,16 +937,17 @@ const PortfolioPage: React.FC<PortfolioPageProps> = ({ onRefresh }) => {
         display: 'flex',
         justifyContent: 'center',
         alignItems: 'center',
+        flexDirection: 'column'
       }}>
         <Spin size="large" />
-        <div style={{ marginLeft: '16px' }}>加载投资组合数据...</div>
+        <div style={{ marginTop: '16px' }}>加载投资组合数据...</div>
       </div>
     );
   }
 
   return (
-    <>
-      {/* 投资组合汇总 - 保持不变 */}
+    <div style={{ padding: '24px' }}>
+      {/* 投资组合汇总 */}
       {portfolioSummary && (
         <Row gutter={[16, 16]} style={{ marginBottom: '24px' }}>
           <Col xs={24} sm={6}>
@@ -739,7 +1002,7 @@ const PortfolioPage: React.FC<PortfolioPageProps> = ({ onRefresh }) => {
         </Row>
       )}
 
-      {/* 股票搜索 - 保持不变 */}
+      {/* 股票搜索 */}
       <Card style={{ marginBottom: '24px' }}>
         <Title level={5}>添加新股票</Title>
         <AutoComplete
@@ -767,14 +1030,43 @@ const PortfolioPage: React.FC<PortfolioPageProps> = ({ onRefresh }) => {
             title="我的股票"
             extra={
               <Space>
-                <Button type="text" size="small">
-                  按名称排序 <DownOutlined />
-                </Button>
-                <Button type="text" size="small">
+                <Dropdown
+                  menu={{
+                    items: getSortableColumns().map(col => ({
+                      key: col.key,
+                      label: (
+                        <Space>
+                          {col.label}
+                          {sortField === col.key && (
+                            <span style={{ color: '#1890ff' }}>
+                              {sortOrder === 'asc' ? '↑' : '↓'}
+                            </span>
+                          )}
+                        </Space>
+                      ),
+                      onClick: () => handleSort(col.key),
+                    })),
+                  }}
+                  trigger={['click']}
+                >
+                  <Button type="text" size="small">
+                    {getSortDisplayText()} <DownOutlined />
+                  </Button>
+                </Dropdown>
+                <Button
+                  type="text"
+                  size="small"
+                  onClick={() => setVisualizationVisible(true)}
+                >
                   可视化
                 </Button>
-                <Button type="primary" size="small" icon={<PlusOutlined />}>
-                  投资
+                <Button
+                  type="primary"
+                  size="small"
+                  icon={<PlusOutlined />}
+                  onClick={refreshAllData}
+                >
+                  刷新数据
                 </Button>
               </Space>
             }
@@ -806,27 +1098,31 @@ const PortfolioPage: React.FC<PortfolioPageProps> = ({ onRefresh }) => {
               />
             ) : (
               <Empty description="暂无股票数据">
-                <Button type="primary" icon={<PlusOutlined />}>
-                  添加第一只股票
+                <Button
+                  type="primary"
+                  icon={<PlusOutlined />}
+                  onClick={refreshAllData}
+                >
+                  加载数据
                 </Button>
               </Empty>
             )}
           </Card>
         </Col>
 
-        {/* 图表区域 - 保持不变 */}
+        {/* 图表区域 */}
         <Col xs={24} xl={8}>
           <Space direction="vertical" size="middle" style={{ width: '100%' }}>
-            <Card title="收益率与收益贡献对比" size="small">
+            <Card title="收益率对比" size="small">
               {userStocks.length > 0 ? (
-                <ResponsiveContainer width="100%" height={350}>
-                  <BarChart data={generatePortfolioData().stocks}>
+                <ResponsiveContainer width="100%" height={300}>
+                  <BarChart data={generatePortfolioData()}>
                     <CartesianGrid strokeDasharray="3 3" />
                     <XAxis dataKey="symbol" />
-                    <YAxis yAxisId="left" />
+                    <YAxis />
                     <RechartsTooltip />
                     <Legend />
-                    <Bar yAxisId="left" dataKey="profitLossPercent" fill="#1890ff" name="收益率(%)" />
+                    <Bar dataKey="profitLossPercent" fill="#1890ff" name="收益率(%)" />
                   </BarChart>
                 </ResponsiveContainer>
               ) : (
@@ -865,6 +1161,18 @@ const PortfolioPage: React.FC<PortfolioPageProps> = ({ onRefresh }) => {
         </Col>
       </Row>
 
+      {/* 投资热力图模态框 */}
+      <Modal
+        title="投资组合可视化"
+        open={visualizationVisible}
+        onCancel={() => setVisualizationVisible(false)}
+        footer={null}
+        width={900}
+        style={{ top: 20 }}
+      >
+        <HeatmapVisualization />
+      </Modal>
+
       {/* 交易模态框 */}
       <Modal
         title={`${tradeType === 'buy' ? '买入' : '卖出'} ${selectedStock?.symbol}`}
@@ -888,6 +1196,19 @@ const PortfolioPage: React.FC<PortfolioPageProps> = ({ onRefresh }) => {
           >
             <InputNumber
               style={{ width: '100%' }}
+              min={0.01}
+              step={0.01}
+              precision={2}
+            />
+          </Form.Item>
+
+          <Form.Item
+            name="quantity"
+            label="数量"
+            rules={[{ required: true, message: '请输入数量' }]}
+          >
+            <InputNumber
+              style={{ width: '100%' }}
               min={1}
               max={tradeType === 'sell' ? selectedStock?.quantity || 0 : undefined}
             />
@@ -902,7 +1223,13 @@ const PortfolioPage: React.FC<PortfolioPageProps> = ({ onRefresh }) => {
           </Form.Item>
 
           {tradeType === 'sell' && (
-            <div style={{ marginBottom: 16, padding: 8, backgroundColor: '#f6ffed', border: '1px solid #b7eb8f', borderRadius: 4 }}>
+            <div style={{
+              marginBottom: 16,
+              padding: 8,
+              backgroundColor: '#f6ffed',
+              border: '1px solid #b7eb8f',
+              borderRadius: 4
+            }}>
               <Text type="secondary">
                 最多可卖出: {selectedStock?.quantity || 0} 股
               </Text>
@@ -929,7 +1256,7 @@ const PortfolioPage: React.FC<PortfolioPageProps> = ({ onRefresh }) => {
         </Form>
       </Modal>
 
-      {/* 股票详情模态框 - 保持不变 */}
+      {/* 股票详情模态框 */}
       <Modal
         title={`股票详情 - ${selectedStock?.symbol}`}
         open={modalVisible}
@@ -943,7 +1270,7 @@ const PortfolioPage: React.FC<PortfolioPageProps> = ({ onRefresh }) => {
             layout="vertical"
             onFinish={handleUpdateStock}
           >
-            <Space direction="vertical" style={{ width: '100%' }}>
+            <Space direction="vertical" style={{ width: '100%', marginBottom: 16 }}>
               <div>
                 <Text strong>公司名称：</Text>
                 <Text>{selectedStock.stock.companyName}</Text>
@@ -960,12 +1287,19 @@ const PortfolioPage: React.FC<PortfolioPageProps> = ({ onRefresh }) => {
               </div>
             </Space>
 
-            <Form.Item name="notes" label="备注" style={{ marginTop: 16 }}>
+            <Form.Item name="notes" label="备注">
               <Input.TextArea rows={3} placeholder="添加您的投资备注..." />
             </Form.Item>
 
             <Form.Item name="alertPrice" label="价格提醒">
-              <Input type="number" placeholder="设置价格提醒..." prefix="$" />
+              <InputNumber
+                style={{ width: '100%' }}
+                placeholder="设置价格提醒..."
+                prefix="$"
+                min={0.01}
+                step={0.01}
+                precision={2}
+              />
             </Form.Item>
 
             <Form.Item>
@@ -981,7 +1315,7 @@ const PortfolioPage: React.FC<PortfolioPageProps> = ({ onRefresh }) => {
           </Form>
         )}
       </Modal>
-    </>
+    </div>
   );
 };
 
