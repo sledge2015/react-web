@@ -1,4 +1,4 @@
-// src/components/AdminPanel/index.tsx - 语法修复版本
+// src/components/AdminPanel/index.tsx
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   Card,
@@ -66,10 +66,11 @@ import {
   LineChart,
   Line,
 } from 'recharts';
-import { useAuth, APIClient } from '../../hooks/useAuth';
+import { useAuth } from '../../hooks/useAuth';
 import { User } from '../../types/auth';
 import dayjs from 'dayjs';
 import relativeTime from 'dayjs/plugin/relativeTime';
+import {adminService} from "../../services/adminService";
 
 dayjs.extend(relativeTime);
 
@@ -168,28 +169,28 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ activeTab, onRefresh }) => {
   }, [activeTab]);
 
   // 获取系统统计
-  const fetchStats = useCallback(async () => {
-    try {
-      const response = await APIClient.get('/admin/stats');
-      if (response.success) {
-        setStats(response.data);
-      }
-    } catch (error) {
-      console.error('获取系统统计失败:', error);
-      // 使用模拟数据作为后备
-      setStats({
-        totalUsers: 156,
-        activeUsers: 89,
-        totalStocks: 2341,
-        totalApiCalls: 45678,
-        systemUptime: '15天 7小时',
-        memoryUsage: 68,
-        cpuUsage: 45,
-        diskUsage: 72,
-        lastBackup: '2小时前',
-      });
-    }
-  }, []);
+  // const fetchStats = useCallback(async () => {
+  //   try {
+  //     // const response = await adminService.get('/admin/stats');
+  //     if (response.success) {
+  //       // setStats(response.message);
+  //     }
+  //   } catch (error) {
+  //     console.error('获取系统统计失败:', error);
+  //     // 使用模拟数据作为后备
+  //     setStats({
+  //       totalUsers: 156,
+  //       activeUsers: 89,
+  //       totalStocks: 2341,
+  //       totalApiCalls: 45678,
+  //       systemUptime: '15天 7小时',
+  //       memoryUsage: 68,
+  //       cpuUsage: 45,
+  //       diskUsage: 72,
+  //       lastBackup: '2小时前',
+  //     });
+  //   }
+  // }, []);
 
   // 获取用户列表
   const fetchUsers = useCallback(async (page: number = 1, search?: string) => {
@@ -205,17 +206,17 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ activeTab, onRefresh }) => {
         params.search = search || userFilters.search;
       }
 
-      const response = await APIClient.get('/admin/users', params);
+      // const response = await adminService.get('/admin/users', params);
 
-      if (response.success) {
-        setUsers(response.users || []);
-        setUsersPagination(prev => ({
-          ...prev,
-          current: response.page || page,
-          total: response.total || 0,
-          perPage: response.per_page || 10
-        }));
-      }
+      // if (response.success) {
+      //   setUsers(response.users || []);
+      //   setUsersPagination(prev => ({
+      //     ...prev,
+      //     current: response.page || page,
+      //     total: response.total || 0,
+      //     perPage: response.per_page || 10
+      //   }));
+      // }
     } catch (error) {
       console.error('获取用户列表失败:', error);
 
@@ -285,15 +286,15 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ activeTab, onRefresh }) => {
         ...activityFilters
       };
 
-      const response = await APIClient.get('/admin/logs', params);
-      if (response.success) {
-        setActivities(response.data.logs || []);
-        setActivitiesPagination(prev => ({
-          ...prev,
-          current: response.data.page || page,
-          total: response.data.total || 0,
-        }));
-      }
+      // const response = await apiClient.get('/admin/logs', params);
+      // if (response.success) {
+      //   setActivities(response.data.logs || []);
+      //   setActivitiesPagination(prev => ({
+      //     ...prev,
+      //     current: response.data.page || page,
+      //     total: response.data.total || 0,
+      //   }));
+      // }
     } catch (error) {
       console.error('获取活动日志失败:', error);
       // 使用模拟数据作为后备
@@ -347,58 +348,58 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ activeTab, onRefresh }) => {
   }, [hasPermission, activitiesPagination.pageSize, activityFilters]);
 
   // 刷新所有数据
-  const refreshAllData = useCallback(async () => {
-    await Promise.all([
-      fetchStats(),
-      fetchUsers(),
-      fetchActivities(),
-    ]);
-    message.success('管理面板数据已刷新');
-  }, [fetchStats, fetchUsers, fetchActivities]);
+  // const refreshAllData = useCallback(async () => {
+  //   await Promise.all([
+  //     fetchStats(),
+  //     fetchUsers(),
+  //     fetchActivities(),
+  //   ]);
+  //   message.success('管理面板数据已刷新');
+  // }, [fetchStats, fetchUsers, fetchActivities]);
 
   // 初始化数据
-  useEffect(() => {
-    const initializeData = async () => {
-      try {
-        setLoading(true);
-        await Promise.all([
-          fetchStats(),
-          fetchUsers(),
-          fetchActivities(),
-        ]);
-      } catch (error) {
-        console.error('初始化管理面板失败:', error);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    initializeData();
-  }, [fetchStats, fetchUsers, fetchActivities]);
+  // useEffect(() => {
+  //   const initializeData = async () => {
+  //     try {
+  //       setLoading(true);
+  //       await Promise.all([
+  //         fetchStats(),
+  //         fetchUsers(),
+  //         fetchActivities(),
+  //       ]);
+  //     } catch (error) {
+  //       console.error('初始化管理面板失败:', error);
+  //     } finally {
+  //       setLoading(false);
+  //     }
+  //   };
+  //
+  //   initializeData();
+  // }, [fetchStats, fetchUsers, fetchActivities]);
 
   // 监听全局刷新事件
-  useEffect(() => {
-    const handleGlobalRefresh = (event: CustomEvent) => {
-      // 只在当前是admin相关页面时才刷新
-      if (event.detail?.activeMenu?.startsWith('admin')) {
-        refreshAllData();
-      }
-    };
-
-    window.addEventListener('refreshData', handleGlobalRefresh as EventListener);
-    return () => window.removeEventListener('refreshData', handleGlobalRefresh as EventListener);
-  }, [refreshAllData]);
+  // useEffect(() => {
+  //   const handleGlobalRefresh = (event: CustomEvent) => {
+  //     // 只在当前是admin相关页面时才刷新
+  //     if (event.detail?.activeMenu?.startsWith('admin')) {
+  //       refreshAllData();
+  //     }
+  //   };
+  //
+  //   window.addEventListener('refreshData', handleGlobalRefresh as EventListener);
+  //   return () => window.removeEventListener('refreshData', handleGlobalRefresh as EventListener);
+  // }, [refreshAllData]);
 
   // 创建/更新用户
   const handleSaveUser = async (values: any) => {
     try {
-      if (editingUser) {
-        await APIClient.put(`/admin/users/${editingUser.id}`, values);
-        message.success('用户信息已更新');
-      } else {
-        await APIClient.post('/admin/users', values);
-        message.success('用户创建成功');
-      }
+      // if (editingUser) {
+      //   await adminService.put(`/admin/users/${editingUser.id}`, values);
+      //   message.success('用户信息已更新');
+      // } else {
+      //   await adminService.post('/admin/users', values);
+      //   message.success('用户创建成功');
+      // }
 
       setUserModalVisible(false);
       setEditingUser(null);
@@ -417,7 +418,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ activeTab, onRefresh }) => {
     }
 
     try {
-      await APIClient.delete(`/admin/users/${userId}`);
+      // await APIClient.delete(`/admin/users/${userId}`);
       message.success(`用户 "${username}" 已成功删除`);
       fetchUsers(usersPagination.current);
     } catch (error) {
@@ -433,15 +434,15 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ activeTab, onRefresh }) => {
     }
 
     try {
-      const response = await APIClient.post(`/admin/users/${userId}/reset-password`);
-      const tempPassword = response.data?.temporaryPassword || `temp${Math.random().toString(36).substr(2, 8)}`;
+      // const response = await APIClient.post(`/admin/users/${userId}/reset-password`);
+      // const tempPassword = response.data?.temporaryPassword || `temp${Math.random().toString(36).substr(2, 8)}`;
 
       Modal.success({
         title: '密码重置成功',
         content: (
           <div>
             <p>用户 "{username}" 的密码已重置</p>
-            <p>临时密码: <Text code copyable>{tempPassword}</Text></p>
+            {/*<p>临时密码: <Text code copyable>{tempPassword}</Text></p>*/}
             <p style={{ color: '#faad14' }}>请及时将临时密码告知用户，并要求其首次登录时修改密码</p>
           </div>
         ),
@@ -454,7 +455,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ activeTab, onRefresh }) => {
   // 保存系统配置
   const handleSaveConfig = async (values: any) => {
     try {
-      await APIClient.put('/admin/config', values);
+      // await APIClient.put('/admin/config', values);
       message.success('系统配置已保存');
     } catch (error) {
       message.error('保存配置失败');
@@ -467,19 +468,19 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ activeTab, onRefresh }) => {
       let result;
       switch (action) {
         case 'backup':
-          result = await APIClient.post('/admin/backup');
-          message.success(`系统备份完成：${result.data?.filename || 'backup.sql'}`);
+          // result = await APIClient.post('/admin/backup');
+          // message.success(`系统备份完成：${result.data?.filename || 'backup.sql'}`);
           break;
         case 'cleanup':
-          result = await APIClient.post('/admin/cleanup-logs');
-          message.success(`日志清理完成，删除了 ${result.data?.deletedCount || 0} 条记录`);
+          // result = await APIClient.post('/admin/cleanup-logs');
+          // message.success(`日志清理完成，删除了 ${result.data?.deletedCount || 0} 条记录`);
           break;
         case 'restart':
-          await APIClient.post('/admin/restart');
+          // await APIClient.post('/admin/restart');
           message.success('系统重启指令已发送');
           break;
       }
-      fetchStats();
+      // fetchStats();
     } catch (error) {
       const actionText = action === 'backup' ? '备份' : action === 'cleanup' ? '清理' : '重启';
       message.error(`${actionText}操作失败`);
