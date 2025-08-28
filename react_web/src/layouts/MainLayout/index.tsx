@@ -1,5 +1,6 @@
-// src/layouts/MainLayout.tsx - 主布局组件
-import React, { useState, useCallback } from 'react';
+// src/layouts/MainLayout/index.tsx - 修复后的主布局组件
+import React, {useState, useCallback, useEffect} from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   Layout,
   Menu,
@@ -14,9 +15,6 @@ import {
 } from 'antd';
 import {
   UserOutlined,
-  StockOutlined,
-  DollarOutlined,
-  RiseOutlined,
   LogoutOutlined,
   SettingOutlined,
   BellOutlined,
@@ -25,14 +23,10 @@ import {
   DashboardOutlined,
   BarChartOutlined,
   TeamOutlined,
-  FileTextOutlined,
-  SafetyOutlined,
+  ReloadOutlined,
   HeartOutlined,
   StarOutlined,
   TrophyOutlined,
-  ReloadOutlined,
-  MonitorOutlined,
-  ControlOutlined,
 } from '@ant-design/icons';
 import { useAuth } from '../../hooks/useAuth';
 import type { MenuProps } from 'antd';
@@ -45,6 +39,7 @@ interface MenuItem {
   key: string;
   icon: React.ReactNode;
   label: string;
+  path: string;
   permission?: string;
   children?: MenuItem[];
 }
@@ -53,14 +48,14 @@ interface MenuItem {
 interface MainLayoutProps {
   children: React.ReactNode;
   activeMenu: string;
-  onMenuChange: (key: string) => void;
   refreshing?: boolean;
   onRefresh?: () => void;
 }
 
 // 用户下拉菜单组件
-const UserDropdown: React.FC<{ onMenuChange: (key: string) => void }> = ({ onMenuChange }) => {
+const UserDropdown: React.FC = () => {
   const { user, logout, hasPermission } = useAuth();
+  const navigate = useNavigate();
 
   const userMenuItems: MenuProps['items'] = [
     {
@@ -74,14 +69,6 @@ const UserDropdown: React.FC<{ onMenuChange: (key: string) => void }> = ({ onMen
       label: '设置',
     },
     { type: 'divider' },
-
-    // 快速切换菜单项
-    {
-      key: 'portfolio',
-      icon: <DashboardOutlined />,
-      label: '返回投资组合',
-    },
-
     // 管理员快速入口
     ...(hasPermission('system.config') ? [{
       key: 'admin',
@@ -103,9 +90,8 @@ const UserDropdown: React.FC<{ onMenuChange: (key: string) => void }> = ({ onMen
       case 'logout':
         logout();
         break;
-      case 'portfolio':
       case 'admin':
-        onMenuChange(key);
+        navigate('/admin');
         break;
       case 'profile':
         message.info('个人资料功能开发中...');
@@ -140,12 +126,13 @@ const UserDropdown: React.FC<{ onMenuChange: (key: string) => void }> = ({ onMen
 const MainLayout: React.FC<MainLayoutProps> = ({
   children,
   activeMenu,
-  onMenuChange,
   refreshing = false,
   onRefresh,
 }) => {
   const { hasPermission } = useAuth();
+  const navigate = useNavigate();
   const [collapsed, setCollapsed] = useState(false);
+  const [openKeys, setOpenKeys] = useState<string[]>([]);
 
   // 菜单配置
   const menuItems: MenuItem[] = [
@@ -153,33 +140,69 @@ const MainLayout: React.FC<MainLayoutProps> = ({
       key: 'portfolio',
       icon: <DashboardOutlined />,
       label: '投资组合',
+      path: '/portfolio',
     },
     {
       key: 'watchlist',
       icon: <HeartOutlined />,
       label: '关注列表',
+      path: '/watchlist',
     },
     {
       key: 'market',
       icon: <BarChartOutlined />,
       label: '市场行情',
+      path: '/market',
     },
     {
       key: 'analysis',
       icon: <TrophyOutlined />,
       label: '分析工具',
+      path: '/analysis',
     },
     {
       key: 'favorites',
       icon: <StarOutlined />,
       label: '收藏夹',
+      path: '/favorites',
     },
     // 管理员菜单
     ...(hasPermission('system.config') ? [{
       key: 'admin',
       icon: <TeamOutlined />,
       label: '系统管理',
+      path: '/admin',
       permission: 'system.config',
+      children: [
+        {
+          key: 'admin-overview',
+          icon: <DashboardOutlined />,
+          label: '系统概览',
+          path: '/admin/overview',
+          permission: 'system.config',
+        },
+        {
+          key: 'admin-users',
+          icon: <TeamOutlined />,
+          label: '用户管理',
+          path: '/admin/users',
+          permission: 'user.read',
+        },
+        {
+          key: 'admin-system',
+          icon: <SettingOutlined />,
+          label: '系统设置',
+          path: '/admin/system',
+          permission: 'system.config',
+        },
+        {
+          key: 'admin-logs',
+          icon: <UserOutlined />,
+          label: '操作日志',
+          path: '/admin/logs',
+          permission: 'system.logs',
+        },
+      ],
     }] : []),
   ];
 
@@ -199,6 +222,29 @@ const MainLayout: React.FC<MainLayoutProps> = ({
     };
     return menuTitles[menuKey] || '投资管理系统';
   };
+
+  const handleOpenChange = (keys: string[]) => {
+    setOpenKeys(keys);
+  };
+
+  // 处理菜单点击
+  const handleMenuClick = useCallback((key: string) => {
+    const findMenuItem = (items: MenuItem[], targetKey: string): MenuItem | null => {
+      for (const item of items) {
+        if (item.key === targetKey) return item;
+        if (item.children) {
+          const found = findMenuItem(item.children, targetKey);
+          if (found) return found;
+        }
+      }
+      return null;
+    };
+
+    const menuItem = findMenuItem(menuItems, key);
+    if (menuItem) {
+      navigate(menuItem.path);
+    }
+  }, [menuItems, navigate]);
 
   // 处理刷新
   const handleRefresh = useCallback(() => {
@@ -221,6 +267,22 @@ const MainLayout: React.FC<MainLayoutProps> = ({
         children: item.children ? getMenuItems(item.children) : undefined,
       }));
   };
+
+  // 获取选中的菜单键
+  const getSelectedKeys = (): string[] => {
+    // 如果是管理员子页面，需要选中对应的子菜单
+    if (activeMenu.startsWith('admin-')) {
+      return [activeMenu];
+    }
+    return [activeMenu];
+  };
+
+  // 初始化展开的菜单键
+  useEffect(() => {
+    if (activeMenu.startsWith('admin')) {
+      setOpenKeys(['admin']);
+    }
+  }, [activeMenu]);
 
   return (
     <Layout style={{ minHeight: '100vh' }}>
@@ -258,9 +320,12 @@ const MainLayout: React.FC<MainLayoutProps> = ({
         {/* 菜单 */}
         <Menu
           mode="inline"
-          selectedKeys={[activeMenu]}
+          selectedKeys={getSelectedKeys()}
+          // openKeys={getOpenKeys()}
+          openKeys={openKeys}
+          onOpenChange={handleOpenChange}
           style={{ borderRight: 0, marginTop: 8 }}
-          onClick={({ key }) => onMenuChange(key)}
+          onClick={({ key }) => handleMenuClick(key)}
           items={getMenuItems(menuItems)}
         />
       </Sider>
@@ -292,7 +357,7 @@ const MainLayout: React.FC<MainLayoutProps> = ({
 
           {/* 右侧区域 */}
           <Space size="middle">
-            {/* 刷新按钮 - 所有页面通用 */}
+            {/* 刷新按钮 */}
             <Tooltip title="刷新数据">
               <Button
                 icon={<ReloadOutlined />}
@@ -303,7 +368,7 @@ const MainLayout: React.FC<MainLayoutProps> = ({
               />
             </Tooltip>
 
-            {/* 通知 - 所有页面通用 */}
+            {/* 通知 */}
             <Tooltip title="通知">
               <Badge count={3} size="small">
                 <Button
@@ -315,8 +380,8 @@ const MainLayout: React.FC<MainLayoutProps> = ({
               </Badge>
             </Tooltip>
 
-            {/* 用户菜单 - 所有页面通用 */}
-            <UserDropdown onMenuChange={onMenuChange} />
+            {/* 用户菜单 */}
+            <UserDropdown />
           </Space>
         </Header>
 
