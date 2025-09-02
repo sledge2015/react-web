@@ -36,9 +36,7 @@ class Stock(Base):
 	company_name = Column(String(255), nullable=False, index=True)  # 添加索引支持搜索
 	exchange = Column(String(20), default='NASDAQ')  # 新增交易所字段
 	sector = Column(String(100), index=True)  # 添加索引
-	industry = Column(String(100))  # 新增细分行业
 	market_cap = Column(BigInteger)
-	pe_ratio = Column(Float(10, 2))
 	country = Column(String(50))
 	
 	# 新增状态字段
@@ -51,13 +49,14 @@ class Stock(Base):
 	
 	# 添加关系
 	user_stocks = relationship("UserStock", back_populates="stock")
+	trades = relationship("StockTrade", back_populates="stock")  # ✅ 添加与交易的关系
 	
 	def __repr__(self):
 		return f"<Stock(symbol='{self.stock_symbol}', company='{self.company_name}')>"
 
 
 class UserStock(Base):
-	"""用户股票投资组合模型 - 优化版本"""
+	"""用户股票投资组合模型 - 修复关系版本"""
 	__tablename__ = "stock_positions"
 	
 	id = Column(Integer, primary_key=True, index=True)
@@ -78,14 +77,11 @@ class UserStock(Base):
 	average_price = Column(Numeric(12, 4), nullable=False)  # 提升精度
 	total_investment = Column(Numeric(20, 2), nullable=False)  # 总投资额
 	
-	# 移除实时价格字段，避免数据冗余
-	# current_price = Column(Numeric(10, 2), default=0.00)  # 删除
-	# current_value = Column(Numeric(20, 2))  # 删除
+	# 当前价格字段 - 用于快速查询
+	current_price = Column(Numeric(12, 4), default=0)
 	
 	# 盈亏信息
 	unrealized_pnl = Column(Numeric(20, 2), default=0)
-	unrealized_pnl_pct = Column(Numeric(8, 4), default=0)  # 新增百分比
-	realized_pnl = Column(Numeric(20, 2), default=0)  # 新增已实现盈亏
 	
 	# 用户自定义字段
 	notes = Column(Text)  # 投资备注
@@ -106,9 +102,16 @@ class UserStock(Base):
 	created_at = Column(DateTime, nullable=False, server_default=func.now())
 	last_updated = Column(DateTime, nullable=False, server_default=func.now(), onupdate=func.now())
 	
-	# 添加关系
+	# 添加关系 - ✅ 修复关系映射
 	stock = relationship("Stock", back_populates="user_stocks")
-	trades = relationship("StockTrade", back_populates="position")
+	user = relationship("User")  # 简化关系，避免循环引用
+	# ✅ 修复：通过用户ID和股票代码建立与交易的关系
+	trades = relationship(
+		"StockTrade",
+		primaryjoin="and_(UserStock.user_id==StockTrade.user_id, UserStock.stock_symbol==StockTrade.stock_symbol)",
+		foreign_keys="[StockTrade.user_id, StockTrade.stock_symbol]",
+		viewonly=True  # 设为只读关系，避免复杂的更新逻辑
+		)
 	
 	# 添加复合索引和约束
 	__table_args__ = (
@@ -207,15 +210,6 @@ class StockPriceHistory(Base):
 	high = Column(DECIMAL(12, 4), nullable=True)
 	low = Column(DECIMAL(12, 4), nullable=True)
 	close = Column(DECIMAL(12, 4), nullable=True)
-	adj_close = Column(DECIMAL(12, 4), nullable=True)  # 新增复权价格
-	
-	# 变动数据 - 新增
-	change_amount = Column(DECIMAL(12, 4))
-	change_percent = Column(DECIMAL(8, 4))
-	
-	# 成交数据
-	volume = Column(BigInteger, nullable=True)
-	turnover = Column(DECIMAL(20, 2))  # 新增成交额
 	
 	# 技术指标 - 新增
 	pe_ratio = Column(DECIMAL(8, 2))
@@ -241,7 +235,7 @@ class StockPriceHistory(Base):
 
 
 class StockTrade(Base):
-	"""股票交易历史表 - 优化版本"""
+	"""股票交易历史表 - 修复关系版本"""
 	__tablename__ = "stock_trade_history"
 	
 	trade_id = Column(Integer, primary_key=True, autoincrement=True)
@@ -285,9 +279,10 @@ class StockTrade(Base):
 	created_at = Column(DateTime, nullable=False, server_default=func.now())
 	updated_at = Column(DateTime, nullable=False, server_default=func.now(), onupdate=func.now())
 	
-	# 关系
-	position = relationship("UserStock", back_populates="trades")
+	# 关系 - ✅ 修复关系映射
+	stock = relationship("Stock", back_populates="trades")  # 与股票的关系
 	cash_flow = relationship("InvestmentFlow", back_populates="trade")
+	user = relationship("User")  # 与用户的关系
 	
 	# 优化索引
 	__table_args__ = (
@@ -362,6 +357,9 @@ class Portfolio(Base):
 	last_updated = Column(DateTime, nullable=False, server_default=func.now(), onupdate=func.now())
 	created_at = Column(DateTime, nullable=False, server_default=func.now())
 	
+	# 关系
+	user = relationship("User")
+	
 	def calculate_total_return(self):
 		"""计算总收益率"""
 		if self.net_deposits > 0:
@@ -370,3 +368,4 @@ class Portfolio(Base):
 	
 	def __repr__(self):
 		return f"<Portfolio(user_id={self.user_id}, total_value={self.total_value})>"
+	
