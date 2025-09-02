@@ -1,71 +1,8 @@
 // services/stockService.ts
 // 股票相关的API服务
-import { APIClient } from '../hooks/useAuth';
-import { apiClient, ApiResponse } from './api';
-
-export interface Stock {
-  id: string;
-  symbol: string;
-  companyName: string;
-  price: number;
-  change: number;
-  changePercent: number;
-  volume: number;
-  marketCap: number;
-  sector?: string;
-  industry?: string;
-  description?: string;
-  website?: string;
-  ceo?: string;
-  employees?: number;
-  lastUpdated: string;
-  createdAt: string;
-}
-
-export interface UserStock {
-  id: string;
-  userId: string;
-  stockId: string;
-  symbol: string;
-  addedAt: string;
-  notes?: string;
-  alertPrice?: number;
-  stock: Stock;
-}
-
-export interface StockSearchResult {
-  symbol: string;
-  name: string;
-  type: string;
-  region: string;
-  marketOpen: string;
-  marketClose: string;
-  timezone: string;
-  currency: string;
-  matchScore: number;
-}
-
-export interface StockQuote {
-  symbol: string;
-  price: number;
-  change: number;
-  changePercent: number;
-  volume: number;
-  avgVolume: number;
-  marketCap: number;
-  peRatio?: number;
-  week52High: number;
-  week52Low: number;
-  timestamp: string;
-}
-
-export interface PortfolioSummary {
-  totalValue: number;
-  totalGainLoss: number;
-  totalGainLossPercent: number;
-  stockCount: number;
-  lastUpdated: string;
-}
+import { apiClient } from './api';
+import { UserStock,StockQuote,StockSearchResult,Stock,PortfolioSummary } from '../types/stock'
+import internal from "node:stream";
 
 class StockService {
   // 获取用户的股票列表
@@ -242,6 +179,52 @@ class StockService {
     } catch (error) {
       console.error('Get market overview failed:', error);
       return null;
+    }
+  }
+  // 买入股票
+  async buyStock(userStockId: string, tradeData: {
+    symbol: string;
+    price: number;
+    quantity: number;
+    date: string;
+    total_amount: number;
+  }) {
+    try {
+      const response = await apiClient.post(`/stocks/${userStockId}/buy`, tradeData);
+      return response.data;
+    } catch (error) {
+      console.error('买入股票失败:', error);
+      throw error;
+    }
+  }
+
+  // 卖出股票
+  async sellStock(userStockId: string, tradeData: {
+    trade_id:number;
+    stock_symbol: string;
+    price: number;
+    quantity: number;
+    date: string;
+    total_amount: number;
+    transactionId?: string;
+  }) {
+    try {
+      const response = await apiClient.post(`/stocks/${userStockId}/sell`, tradeData);
+      return response.data;
+    } catch (error) {
+      console.error('卖出股票失败:', error);
+      throw error;
+    }
+  }
+
+  // 删除交易记录
+  async deleteTransaction(transactionId: string) {
+    try {
+      const response = await apiClient.delete(`/transactions/${transactionId}`);
+      return response.data;
+    } catch (error) {
+      console.error('删除交易记录失败:', error);
+      throw error;
     }
   }
 }
