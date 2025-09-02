@@ -1,12 +1,17 @@
 # backend/app/api/v1/endpoints/stocks.py
 
-from typing import List
+from typing import List, Optional
+from decimal import Decimal
+from datetime import datetime
 
-from cvxpy import transpose
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
 from app.api.deps import get_db, get_current_active_user
-from app.schemas.stock import UserStockOut, UserStockCreate, UserStockUpdate, StockSearchResult
+from app.schemas.stock import (
+    UserStockOut, UserStockCreate, UserStockUpdate, StockSearchResult,
+    StockTradeRequest, StockSellRequest, StockTradeResponse
+)
+from app.services.stock_trading_service import StockTradingService
 from app.services.stock_service import StockService
 from app.models.user import User
 
@@ -52,6 +57,10 @@ def get_user_stocks(
         # 5. 批量查询交易数据
         stock_transactions_list = StockService.process_stock_trade_history(db, current_user.id, latest_data_map)
         print(f"[INFO] 交易数据获取完成: {list(stock_transactions_list.keys())}")
+        
+        # 7. 批量计算收益率
+        symbol_list = [s.strip().upper() for s in symbols.split(',')]
+        stock_returns_list = StockService.get_stock_performance_analysis(db, symbol_list)
 
         # 6. 构建响应数据
         stock_list = []
@@ -63,7 +72,9 @@ def get_user_stocks(
 
             info = stock_info or {}
             latest = stock_latest_data or {}
-
+            
+            #计算整体收益率
+            totalPercent = (latest.get('price', user_stock.current_price) - user_stock.average_price)/user_stock.average_price * Decimal('100')
             stock_data = {
                 "id": user_stock.id,
                 "symbol": symbol,
@@ -72,6 +83,10 @@ def get_user_stocks(
                 "averagePrice": user_stock.average_price,
                 "unrealizedPnl": user_stock.unrealized_pnl,
                 "weight": user_stock.weight,
+	            "dayPercent":stock_returns_list[symbol]['1W'],
+	            "weekPercent":stock_returns_list[symbol]['1M'],
+                "monthPercent":stock_returns_list[symbol][''],
+                "totalPercent":totalPercent,
 	            "transactions": stock_transaction,
                 "stock": {
                     "id": user_stock.id,
@@ -255,3 +270,277 @@ def get_portfolio_summary(
 			}
 	except Exception as e:
 		print(f"❌ 获取投资组合汇总失败: {e}")
+
+
+@router.post(
+	"/buy",
+	status_code=status.HTTP_201_CREATED,
+	summary="买入股票",
+	description="执行股票买入操作，更新持仓和资金流水"
+	)
+def buy_stock(
+		trade_data: StockTradeRequest,
+		db: Session = Depends(get_db),
+		current_user: User = Depends(get_current_active_user)
+		):
+	"""
+	买入股票操作
+
+	参数:
+	- stock_symbol: 股票代码
+	- quantity: 买入数量
+	- price: 买入价格
+	- notes: 备注信息（可选）
+	- commission: 佣金费用（可选）
+	- other_fees: 其他费用（可选）
+	"""
+	try:
+		result = StockTradingService.buy_stock(
+			db=db,
+			user_id=current_user.id,
+			stock_symbol=trade_data.stock_symbol,
+			quantity=trade_data.quantity,
+			price=trade_data.price,
+			notes=trade_data.notes,
+			commission=trade_data.commission or 0,
+			other_fees=trade_data.other_fees or 0
+			)
+		
+		return {
+			"success": True,
+			"data": result,
+			"message": f"成功买入 {trade_data.stock_symbol} {trade_data.quantity} 股"
+			}
+	
+	except ValueError as e:
+		raise HTTPException(
+			status_code=status.HTTP_400_BAD_REQUEST,
+			detail=str(e)
+			)
+	except Exception as e:
+		print(f"❌ 买入股票失败: {e}")
+		raise HTTPException(
+			status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+			detail=f"买入操作失败: {str(e)}"
+			)
+
+
+@router.post(
+	"/sell",
+	status_code=status.HTTP_200_OK,
+	summary="卖出股票",
+	description="执行股票卖出操作，更新持仓和资金流水"
+	)
+def sell_stock(
+		trade_data: StockSellRequest,
+		db: Session = Depends(get_db),
+		current_user: User = Depends(get_current_active_user)
+		):
+	"""
+	卖出股票操作
+
+	参数:
+	- stock_symbol: 股票代码
+	- quantity: 卖出数量
+	- price: 卖出价格
+	- notes: 备注信息（可选）
+	- commission: 佣金费用（可选）
+	- tax_fee: 税费（可选）
+	- other_fees: 其他费用（可选）
+	"""
+	try:
+		result = StockTradingService.sell_stock(
+			db=db,
+			user_id=current_user.id,
+			stock_symbol=trade_data.stock_symbol,
+			quantity=trade_data.quantity,
+			price=trade_data.price,
+			notes=trade_data.notes,
+			commission=trade_data.commission or 0,
+			tax_fee=trade_data.tax_fee or 0,
+			other_fees=trade_data.other_fees or 0
+			)
+		
+		return {
+			"success": True,
+			"data": result,
+			"message": f"成功卖出 {trade_data.stock_symbol} {trade_data.quantity} 股"
+			}
+	
+	except ValueError as e:
+		raise HTTPException(
+			status_code=status.HTTP_400_BAD_REQUEST,
+			detail=str(e)
+			)
+	except Exception as e:
+		print(f"❌ 卖出股票失败: {e}")
+		raise HTTPException(
+			status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+			detail=f"卖出操作失败: {str(e)}"
+			)
+
+@router.delete(
+	"/position/{position_id}/clear",
+	status_code=status.HTTP_200_OK,
+	summary="清空股票持仓",
+	description="完全清空指定的股票持仓（市价卖出所有股票）"
+	)
+def clear_position(
+		position_id: int,
+		current_price: Optional[float] = Query(None, description="当前市价，不提供则使用最新价格"),
+		db: Session = Depends(get_db),
+		current_user: User = Depends(get_current_active_user)
+		):
+	"""
+	清空股票持仓
+
+	参数:
+	- position_id: 持仓ID
+	- current_price: 当前市价（可选，如果不提供将使用最新价格）
+	"""
+	try:
+		result = StockTradingService.clear_position(
+			db=db,
+			user_id=current_user.id,
+			position_id=position_id,
+			sell_price=current_price
+			)
+		
+		return {
+			"success": True,
+			"data": result,
+			"message": f"成功清空持仓 {result.get('stock_symbol', '')}"
+			}
+	
+	except ValueError as e:
+		raise HTTPException(
+			status_code=status.HTTP_400_BAD_REQUEST,
+			detail=str(e)
+			)
+	except Exception as e:
+		print(f"❌ 清空持仓失败: {e}")
+		raise HTTPException(
+			status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+			detail=f"清空持仓失败: {str(e)}"
+			)
+
+@router.get(
+	"/trades/history",
+	summary="获取交易历史",
+	description="获取用户的股票交易历史记录"
+	)
+def get_trade_history(
+		stock_symbol: Optional[str] = Query(None, description="股票代码过滤"),
+		trade_type: Optional[str] = Query(None, description="交易类型过滤(buy/sell/dividend)"),
+		page: int = Query(1, ge=1, description="页码"),
+		page_size: int = Query(20, ge=1, le=100, description="每页数量"),
+		db: Session = Depends(get_db),
+		current_user: User = Depends(get_current_active_user)
+		):
+	"""
+	获取交易历史记录
+
+	参数:
+	- stock_symbol: 股票代码过滤（可选）
+	- trade_type: 交易类型过滤（可选：buy, sell, dividend）
+	- page: 页码
+	- page_size: 每页数量
+	"""
+	try:
+		# 转换trade_type字符串为枚举
+		trade_type_enum = None
+		if trade_type:
+			try:
+				trade_type_enum = TradeType(trade_type.lower())
+			except ValueError:
+				raise HTTPException(
+					status_code=status.HTTP_400_BAD_REQUEST,
+					detail=f"无效的交易类型: {trade_type}，支持的类型: buy, sell, dividend"
+					)
+		
+		trades = StockTradingService.get_trade_history(
+			db=db,
+			user_id=current_user.id,
+			stock_symbol=stock_symbol,
+			trade_type=trade_type_enum,
+			page=page,
+			page_size=page_size
+			)
+		
+		return {
+			"success": True,
+			"data": trades,
+			"message": "获取交易历史成功"
+			}
+	
+	except HTTPException:
+		raise
+	except Exception as e:
+		print(f"❌ 获取交易历史失败: {e}")
+		raise HTTPException(
+			status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+			detail=f"获取交易历史失败: {str(e)}"
+			)
+
+@router.get(
+	"/trades/statistics",
+	summary="获取交易统计",
+	description="获取用户的交易统计信息"
+	)
+def get_trade_statistics(
+		start_date: Optional[str] = Query(None, description="开始日期 (YYYY-MM-DD)"),
+		end_date: Optional[str] = Query(None, description="结束日期 (YYYY-MM-DD)"),
+		db: Session = Depends(get_db),
+		current_user: User = Depends(get_current_active_user)
+		):
+	"""
+	获取交易统计信息
+
+	参数:
+	- start_date: 开始日期，格式：YYYY-MM-DD
+	- end_date: 结束日期，格式：YYYY-MM-DD
+	"""
+	try:
+		# 解析日期
+		start_dt = None
+		end_dt = None
+		
+		if start_date:
+			try:
+				start_dt = datetime.strptime(start_date, "%Y-%m-%d")
+			except ValueError:
+				raise HTTPException(
+					status_code=status.HTTP_400_BAD_REQUEST,
+					detail="开始日期格式错误，请使用 YYYY-MM-DD 格式"
+					)
+		
+		if end_date:
+			try:
+				end_dt = datetime.strptime(end_date, "%Y-%m-%d")
+			except ValueError:
+				raise HTTPException(
+					status_code=status.HTTP_400_BAD_REQUEST,
+					detail="结束日期格式错误，请使用 YYYY-MM-DD 格式"
+					)
+		
+		statistics = StockTradingService.get_trade_statistics(
+			db=db,
+			user_id=current_user.id,
+			start_date=start_dt,
+			end_date=end_dt
+			)
+		
+		return {
+			"success": True,
+			"data": statistics,
+			"message": "获取交易统计成功"
+			}
+	
+	except HTTPException:
+		raise
+	except Exception as e:
+		print(f"❌ 获取交易统计失败: {e}")
+		raise HTTPException(
+			status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+			detail=f"获取交易统计失败: {str(e)}"
+			)
