@@ -85,90 +85,9 @@ const PortfolioPage: React.FC<PortfolioPageProps> = ({ onRefresh }) => {
       const response = await stockService.getUserStocks()
       if (response) {
         const stockData = response as UserStock[];
-        // 如果API返回空数据，使用模拟数据
-        if (!stockData || stockData.length === 0) {
-          setUserStocks([
-            {
-              id: 'us-1',
-              symbol: 'GOVX',
-              addedAt: '2024-01-15T00:00:00.000Z',
-              notes: 'Geovax Labs Inc',
-              quantity: 1463,
-              weight: 45,
-              totalProfit: -1893.09,
-              profitPercent: -63.10,
-              transactions: [
-                {
-                  id: 't1',
-                  type: 'buy',
-                  date: '2024-10-10',
-                  price: 2.61,
-                  quantity: 963,
-                  assetmarketvalue: 1788.68,
-                  profit: -1370.37,
-                  profitPercent: -71.06
-                },
-                {
-                  id: 't2',
-                  type: 'buy',
-                  date: '2025-06-18',
-                  price: 1.18,
-                  quantity: 500,
-                  assetmarketvalue: 211.70,
-                  profit: -169.70,
-                  profitPercent: -35.88
-                }
-              ],
-              stock: {
-                id: 'stock-govx',
-                symbol: 'GOVX',
-                companyName: 'Geovax Labs Inc',
-                price: 0.76,
-                change: -0.13,
-                changePercent: -14.61,
-                volume: 52467890,
-                marketCap: 2750000000,
-                lastUpdated: new Date().toISOString(),
-              },
-            },
-            {
-              id: 'us-2',
-              symbol: 'GOOGL',
-              addedAt: '2024-01-20T00:00:00.000Z',
-              notes: 'Google母公司',
-              quantity: 50,
-              weight: 35,
-              totalProfit: -372,
-              profitPercent: -4.96,
-              transactions: [
-                {
-                  id: 't3',
-                  type: 'buy',
-                  date: '2024-01-20',
-                  price: 150.00,
-                  quantity: 50,
-                  assetmarketvalue: 7500,
-                  profit: -372,
-                  profitPercent: -4.96
-                }
-              ],
-              stock: {
-                id: 'stock-googl',
-                symbol: 'GOOGL',
-                companyName: 'Alphabet Inc.',
-                price: 142.56,
-                change: -1.23,
-                changePercent: -0.86,
-                volume: 25789123,
-                marketCap: 1800000000000,
-                lastUpdated: new Date().toISOString(),
-              },
-            }
-          ]);
-        } else {
-          setUserStocks(stockData);
-          console.log("获取股票值不为空:",stockData)
-        }
+        // 如果API返回空数据
+        setUserStocks(stockData);
+        console.log("获取股票值不为空:",stockData)
       }
     } catch (error) {
       console.error('获取股票列表失败:', error);
@@ -187,17 +106,6 @@ const PortfolioPage: React.FC<PortfolioPageProps> = ({ onRefresh }) => {
       }
     } catch (error) {
       console.error('获取投资组合汇总失败:', error);
-      setPortfolioSummary({
-        totalValue: 34142,
-        totalInvestment: 31500,
-        totalGainLoss: 2642,
-        totalGainLossPercent: 8.39,
-        stockCount: 3,
-        total_investment_cash: 50000,
-        total_interest: 1500,
-        total_profit: 2642,
-        invest_profit_percent: 8.39,
-      });
     }
   }, []);
 
@@ -251,24 +159,16 @@ const PortfolioPage: React.FC<PortfolioPageProps> = ({ onRefresh }) => {
           bValue = b.stock.companyName;
           break;
         case 'price':
-          aValue = a.stock.price;
-          bValue = b.stock.price;
+          aValue = a.stock.market.price;
+          bValue = b.stock.market.price;
           break;
         case 'quantity':
-          aValue = a.quantity || 0;
-          bValue = b.quantity || 0;
+          aValue = a.position.quantity || 0;
+          bValue = b.position.quantity || 0;
           break;
         case 'dailyProfit':
-          aValue = a.stock.change * (a.quantity || 0);
-          bValue = b.stock.change * (b.quantity || 0);
-          break;
-        case 'totalProfit':
-          aValue = a.totalProfit || 0;
-          bValue = b.totalProfit || 0;
-          break;
-        case 'profitPercent':
-          aValue = a.profitPercent || 0;
-          bValue = b.profitPercent || 0;
+          aValue = a.stock.market.change * (a.position.quantity || 0);
+          bValue = b.stock.market.change * (b.position.quantity || 0);
           break;
         default:
           return 0;
@@ -292,8 +192,6 @@ const PortfolioPage: React.FC<PortfolioPageProps> = ({ onRefresh }) => {
     { key: 'price', label: '价格' },
     { key: 'quantity', label: '数量' },
     { key: 'dailyProfit', label: '日收益' },
-    { key: 'totalProfit', label: '总收益' },
-    { key: 'profitPercent', label: '收益率' },
   ];
 
   // 生成热力图数据
@@ -301,14 +199,14 @@ const PortfolioPage: React.FC<PortfolioPageProps> = ({ onRefresh }) => {
     if (!userStocks.length) return [];
 
     // 计算总投资价值用于相对大小
-    const maxValue = Math.max(...userStocks.map(stock => stock.weight || 0));
-    const minValue = Math.min(...userStocks.map(stock => stock.weight || 0));
+    const maxValue = Math.max(...userStocks.map(stock => stock.position.weight || 0));
+    const minValue = Math.min(...userStocks.map(stock => stock.position.weight || 0));
     const valueRange = maxValue - minValue;
 
     return userStocks.map(stock => {
-      const currentValue = stock.weight || 0;
-      const profitPercent = stock.profitPercent || 0;
-      const dailyChange = stock.stock.changePercent || 0;
+      const currentValue = stock.position.weight || 0;
+      const profitPercent = stock.performance.pnl.totalPercent || 0;
+      const dailyChange = stock.stock.market.changePercent || 0;
 
       // 计算相对大小 (20% - 100%)
       const sizeRatio = valueRange > 0
@@ -343,8 +241,8 @@ const PortfolioPage: React.FC<PortfolioPageProps> = ({ onRefresh }) => {
         sizeRatio,
         colorIntensity,
         colorType,
-        totalProfit: stock.totalProfit || 0,
-        quantity: stock.quantity || 0,
+        totalProfit: stock.performance.pnl.unrealized || 0,
+        quantity: stock.position.quantity || 0,
         companyName: stock.stock.companyName,
       };
     });
@@ -528,7 +426,7 @@ const PortfolioPage: React.FC<PortfolioPageProps> = ({ onRefresh }) => {
     tradeForm.setFieldsValue({
       symbol: stock.symbol,
       type: 'buy',
-      price: stock.stock.price,
+      price: stock.stock.market.price,
       quantity: 1,
       date: dayjs(),
     });
@@ -536,52 +434,104 @@ const PortfolioPage: React.FC<PortfolioPageProps> = ({ onRefresh }) => {
   };
 
   // 卖出股票
-  const handleSellStock = (trade: Transaction) => {
-    // setSelectedStock(stock);
+  const handleSellStock = (stock: UserStock, transaction?: Transaction) => {
+    setSelectedStock(stock);
     setTradeType('sell');
+
+    const maxQuantity = transaction ? transaction.execution.quantity : (stock.position.quantity || 0);
+    const currentPrice = stock.stock.market.price;
+
     tradeForm.setFieldsValue({
-      symbol: trade.symbol,
+      symbol: stock.symbol,
+      trade_id:transaction?.id,
       type: 'sell',
-      price: trade.price,
+      price: currentPrice,
       quantity: 1,
       date: dayjs(),
-      maxQuantity: trade.quantity
+      maxQuantity: maxQuantity,
+      transactionId: transaction?.id || null, // 如果是卖出特定交易，记录交易ID
     });
+
     setTradeModalVisible(true);
   };
 
-  // 执行交易
+  //执行交易
   const handleExecuteTrade = async (values: any) => {
     if (!selectedStock) return;
 
     try {
-      const tradeData = {
-        ...values,
-        date: values.date.format('YYYY-MM-DD'),
-        totalAmount: values.price * values.quantity
-      };
-      // const response = await stockService.getTrendingStocks(20)
+      setLoading(true);
 
-      // if (response) {
-      //   message.success(`${tradeType === 'buy' ? '买入' : '卖出'}操作成功`);
-      //   setTradeModalVisible(false);
-      //   tradeForm.resetFields();
-      //   fetchUserStocks();
-      //   fetchPortfolioSummary();
-      // }
-    } catch (error) {
-      message.error(`${tradeType === 'buy' ? '买入' : '卖出'}操作失败`);
+      const tradeData = {
+        symbol: selectedStock.symbol,
+        type: tradeType,
+        price: values.price,
+        quantity: values.quantity,
+        date: values.date.format('YYYY-MM-DD'),
+        total_amount: values.price * values.quantity,
+        transactionId: values.transactionId || null, // 用于部分卖出特定交易
+      };
+
+      console.log('执行交易:', tradeData);
+
+      // 调用交易API
+      let response;
+      if (tradeType === 'buy') {
+        response = await stockService.buyStock(selectedStock.id, {
+          symbol: selectedStock.symbol,
+          price: tradeData.price,
+          quantity: tradeData.quantity,
+          date: tradeData.date,
+          total_amount: tradeData.total_amount,
+        });
+      } else {
+        response = await stockService.sellStock(selectedStock.id, {
+          trade_id: values.trade_id,
+          stock_symbol: selectedStock.symbol,
+          price: tradeData.price,
+          quantity: tradeData.quantity,
+          date: tradeData.date,
+          total_amount: tradeData.total_amount,
+          transactionId: tradeData.transactionId,
+        });
+      }
+
+      if (response) {
+        message.success(`${tradeType === 'buy' ? '买入' : '卖出'}操作成功`);
+        setTradeModalVisible(false);
+        tradeForm.resetFields();
+        setSelectedStock(null);
+
+        // 刷新数据
+        await Promise.all([
+          fetchUserStocks(),
+          fetchPortfolioSummary(),
+        ]);
+      } else {
+        throw new Error('交易失败');
+      }
+
+    } catch (error: any) {
+      console.error('交易执行失败:', error);
+      message.error(error.message || `${tradeType === 'buy' ? '买入' : '卖出'}操作失败`);
+    } finally {
+      setLoading(false);
     }
   };
 
   // 删除股票
-  const handleRemoveStock = async (userStockId: string) => {
+  const handleDeleteTransaction = async (transactionId: string) => {
     try {
-      await stockService.removeUserStock(userStockId)
-      setUserStocks(prev => prev.filter(stock => stock.id !== userStockId));
-      fetchPortfolioSummary();
+      await stockService.deleteTransaction(transactionId);
+      message.success(`已删除 ${transactionId} 的交易记录`);
+
+      // 刷新数据
+      await Promise.all([
+        fetchUserStocks(),
+        fetchPortfolioSummary(),
+      ]);
     } catch (error) {
-      message.error('删除股票失败');
+      message.error('删除交易记录失败');
     }
   };
 
@@ -589,8 +539,8 @@ const PortfolioPage: React.FC<PortfolioPageProps> = ({ onRefresh }) => {
   const handleViewStock = (stock: UserStock) => {
     setSelectedStock(stock);
     form.setFieldsValue({
-      notes: stock.notes,
-      alertPrice: stock.alertPrice,
+      notes: stock.settings.notes,
+      alertPrice: stock.settings.alerts.priceAlerts,
     });
     setModalVisible(true);
   };
@@ -693,22 +643,27 @@ const PortfolioPage: React.FC<PortfolioPageProps> = ({ onRefresh }) => {
         dataIndex: 'date',
         key: 'date',
         width: 200,
+        render: (_: any, record: Transaction) => (
+          <span>
+            {record.execution.date ? dayjs(record.execution.date).format('YYYY年MM月DD日') : '-'}
+          </span>
+        ),
       },
       {
         title: '购买价格',
         dataIndex: 'price',
         key: 'price',
         width: 100,
-        render: (price: number) => formatPrice(price),
+        render: (_: any, record: Transaction) => formatPrice(record.execution.price),
       },
       {
         title: '数量',
         dataIndex: 'quantity',
         key: 'quantity',
         width: 80,
-        render: (quantity: number) => (
+        render: (_: any, record: Transaction) => (
           <Text>
-            {quantity} <EditOutlined style={{ fontSize: '12px', color: '#bfbfbf', cursor: 'pointer' }} />
+            {record.execution.quantity} <EditOutlined style={{ fontSize: '12px', color: '#bfbfbf', cursor: 'pointer' }} />
           </Text>
         ),
       },
@@ -717,8 +672,8 @@ const PortfolioPage: React.FC<PortfolioPageProps> = ({ onRefresh }) => {
         key: 'profit',
         width: 180,
         render: (_: any, record: Transaction) => (
-          <span style={{ color: (record.profit || 0) >= 0 ? '#52c41a' : '#ff4d4f' }}>
-            {formatPrice(record.profit || 0)} | {(record.profitPercent || 0).toFixed(2)}%
+          <span style={{ color: (record.performance.realizedPnL || 0) >= 0 ? '#52c41a' : '#ff4d4f' }}>
+            {formatPrice(record.performance.realizedPnL || 0)} | {(record.performance.realizedPnLPercent || 0).toFixed(2)}%
           </span>
         ),
       },
@@ -726,9 +681,8 @@ const PortfolioPage: React.FC<PortfolioPageProps> = ({ onRefresh }) => {
         title: '市值',
         key: 'assetmarketvalue',
         width: 100,
-        // render: (assetmarketvalue: number) => formatPrice(assetmarketvalue || 0),
         render: (_: any, record: Transaction) => {
-          return formatPrice(record.assetmarketvalue || 0);
+          return formatPrice(record.execution.totalValue || 0);
         },
       },
       {
@@ -741,14 +695,36 @@ const PortfolioPage: React.FC<PortfolioPageProps> = ({ onRefresh }) => {
                   key: 'sell',
                   label: '卖出',
                   icon: <FallOutlined />,
-                  onClick: () => handleSellStock(record),
+                  onClick: () => {
+                    // 找到对应的股票记录
+                    const stock = userStocks.find(s =>
+                      s.transactions?.some(t => t.id === record.id)
+                    );
+                    if (stock) {
+                      handleSellStock(stock, record);
+                    }
+                  },
                 },
                 {
                   key: 'delete',
-                  label: '删除',
+                  label: '删除交易',
                   icon: <DeleteOutlined />,
                   danger: true,
-                  onClick: () => handleRemoveStock(record.id),
+                  onClick: () => {
+                    const stock = userStocks.find(s =>
+                      s.transactions?.some(t => t.id === record.id)
+                    );
+                    if (stock) {
+                      Modal.confirm({
+                        title: '确认删除',
+                        content: `确定要删除 ${stock.symbol} 在 ${record.execution.date} 的交易记录吗？`,
+                        okText: '删除',
+                        okType: 'danger',
+                        cancelText: '取消',
+                        onOk: () => handleDeleteTransaction(record.id),
+                      });
+                    }
+                  },
                 },
               ];
 
@@ -790,84 +766,82 @@ const PortfolioPage: React.FC<PortfolioPageProps> = ({ onRefresh }) => {
     },
     {
       title: '价格',
-      dataIndex: ['stock', 'price'],
+      dataIndex: 'price',
       width: 120,
-      render: (price: number) => (
-        <Text strong style={{ fontSize: '14px' }}>
-          {formatPrice(price)}
-        </Text>
-      ),
+      render: (_: any, record: UserStock) => {
+        return formatPrice(Math.abs(record.stock.market.price))
+      },
     },
     {
       title: '数量',
       dataIndex: 'quantity',
       key: 'quantity',
       width: 100,
-      render: (quantity: number) => (
-        <Text>
-          {(quantity || 0).toLocaleString()} <EditOutlined style={{ fontSize: '12px', color: '#bfbfbf' }} />
-        </Text>
-      ),
+      render: (_: any, record: UserStock) => record.position?.quantity ?? '-',
     },
     {
       title: '日收益',
       key: 'dailyProfit',
       width: 120,
       render: (_: any, record: UserStock) => {
-        const dailyProfit = record.stock.change * (record.quantity || 0);
+        const dailyProfit = record.performance.returns["1D"];
         const isPositive = dailyProfit >= 0;
         return (
           <span style={{ color: isPositive ? '#52c41a' : '#ff4d4f' }}>
-            {isPositive ? '▲' : '▼'} {formatPrice(Math.abs(dailyProfit))}
+            {isPositive ? '▲' : '▼'} {Math.abs(dailyProfit).toFixed(2)}%
           </span>
         );
       },
     },
     {
       title: '周收益',
-      key: 'dailyProfit',
+      key: 'weekPercent',
       width: 120,
       render: (_: any, record: UserStock) => {
-        const dailyProfit = record.stock.change * (record.quantity || 0);
-        const isPositive = dailyProfit >= 0;
+        const tmpProfit = record.performance.returns["1W"];
+        const isPositive = tmpProfit >= 0;
         return (
           <span style={{ color: isPositive ? '#52c41a' : '#ff4d4f' }}>
-            {isPositive ? '▲' : '▼'} {formatPrice(Math.abs(dailyProfit))}
+            {isPositive ? '▲' : '▼'} {Math.abs(tmpProfit).toFixed(2)}%
           </span>
         );
       },
     },
     {
       title: '月收益',
-      key: 'dailyProfit',
+      key: 'monthPercent',
       width: 120,
       render: (_: any, record: UserStock) => {
-        const dailyProfit = record.stock.change * (record.quantity || 0);
-        const isPositive = dailyProfit >= 0;
+        const tmpProfit = record.performance.returns["1M"];
+        const isPositive = tmpProfit >= 0;
         return (
           <span style={{ color: isPositive ? '#52c41a' : '#ff4d4f' }}>
-            {isPositive ? '▲' : '▼'} {formatPrice(Math.abs(dailyProfit))}
+            {isPositive ? '▲' : '▼'} {(Math.abs(tmpProfit)|| 0).toFixed(2)}%
           </span>
         );
       },
     },
     {
       title: '总收益',
-      key: 'totalProfit',
+      key: 'totalPercent',
       width: 120,
-      render: (_: any, record: UserStock) => (
-        <span style={{ color: (record.totalProfit || 0) >= 0 ? '#52c41a' : '#ff4d4f' }}>
-          {formatPrice(record.totalProfit || 0)} ({(record.profitPercent || 0).toFixed(2)}%)
-        </span>
-      ),
+      render: (_: any, record: UserStock) => {
+        const tmpProfit = record.performance.returns.sinceInception;
+        const isPositive = tmpProfit >= 0;
+        return (
+          <span style={{ color: isPositive ? '#52c41a' : '#ff4d4f' }}>
+            {isPositive ? '▲' : '▼'} {Math.abs(tmpProfit).toFixed(2)}%
+          </span>
+        );
+      },
     },
     {
       title: '总市值',
       key: 'totalProfit',
       width: 120,
       render: (_: any, record: UserStock) => (
-        <span style={{ color: (record.totalProfit || 0) >= 0 ? '#52c41a' : '#ff4d4f' }}>
-          {formatPrice(record.totalProfit || 0)} ({(record.profitPercent || 0).toFixed(2)}%)
+        <span style={{ color: (record.position.currentValue || 0) >= 0 ? '#52c41a' : '#ff4d4f' }}>
+          {formatPrice(record.position.currentValue || 0)} ({(record.position.weight * 100 || 0).toFixed(2)}%)
         </span>
       ),
     },
@@ -881,7 +855,7 @@ const PortfolioPage: React.FC<PortfolioPageProps> = ({ onRefresh }) => {
             key: 'buy',
             label: '买入',
             icon: <ShoppingCartOutlined />,
-            onClick: () => handleBuyStock(record),
+            onClick: () => handleExecuteTrade(record),
           },
           {
             key: 'view',
@@ -894,7 +868,7 @@ const PortfolioPage: React.FC<PortfolioPageProps> = ({ onRefresh }) => {
             label: '删除',
             icon: <DeleteOutlined />,
             danger: true,
-            onClick: () => handleRemoveStock(record.id),
+            onClick: () => handleDeleteTransaction(record.id),
           },
         ];
 
@@ -910,14 +884,14 @@ const PortfolioPage: React.FC<PortfolioPageProps> = ({ onRefresh }) => {
     },
   ];
 
-  // 生成投资组合数据
+  // 生成投资组合数据 #TO DO 重新组合
   const generatePortfolioData = () => {
     return userStocks.map(stock => ({
       symbol: stock.symbol,
-      profitLossPercent: stock.profitPercent || 0,
-      currentValue: stock.profitPercent || 0,
-      investment: stock.profitPercent || 0,
-      weight: stock.weight || 0,
+      profitLossPercent: stock.position.averageCost || 0,
+      currentValue: stock.position.averageCost|| 0,
+      investment: stock.position.averageCost || 0,
+      weight: stock.position.weight || 0,
     }));
   };
 
@@ -925,7 +899,7 @@ const PortfolioPage: React.FC<PortfolioPageProps> = ({ onRefresh }) => {
   const generatePieData = () => {
     return userStocks.map((stock, index) => ({
       name: stock.symbol,
-      value: stock.weight || 0,
+      value: stock.position.weight || 0,
       color: COLORS[index % COLORS.length],
     }));
   };
@@ -953,19 +927,8 @@ const PortfolioPage: React.FC<PortfolioPageProps> = ({ onRefresh }) => {
           <Col xs={24} sm={6}>
             <Card>
               <Statistic
-                title="原始投资金额"
-                value={portfolioSummary.total_investment_cash}
-                precision={2}
-                prefix={<DollarOutlined />}
-                valueStyle={{ color: '#1890ff' }}
-              />
-            </Card>
-          </Col>
-          <Col xs={24} sm={6}>
-            <Card>
-              <Statistic
-                title="持仓投资金额"
-                value={portfolioSummary.totalInvestment}
+                title="初始金额"
+                value={portfolioSummary.overview.totalValue}
                 precision={2}
                 prefix={<DollarOutlined />}
                 valueStyle={{ color: '#1890ff' }}
@@ -976,7 +939,18 @@ const PortfolioPage: React.FC<PortfolioPageProps> = ({ onRefresh }) => {
             <Card>
               <Statistic
                 title="持仓市值"
-                value={portfolioSummary.totalValue}
+                value={portfolioSummary.overview.equityValue}
+                precision={2}
+                prefix={<DollarOutlined />}
+                valueStyle={{ color: '#1890ff' }}
+              />
+            </Card>
+          </Col>
+          <Col xs={24} sm={6}>
+            <Card>
+              <Statistic
+                title="持仓盈亏"
+                value={portfolioSummary.overview.dividendIncome}
                 precision={2}
                 valueStyle={{ color: '#1890ff' }}
                 prefix={<DollarOutlined />}
@@ -986,15 +960,15 @@ const PortfolioPage: React.FC<PortfolioPageProps> = ({ onRefresh }) => {
           <Col xs={24} sm={6}>
             <Card>
               <Statistic
-                title="投资资金变化"
-                value={portfolioSummary.invest_profit_percent}
+                title="实现盈亏"
+                value={portfolioSummary.overview.realizedPnL}
                 precision={2}
                 suffix="%"
                 valueStyle={{
-                  color: portfolioSummary.invest_profit_percent >= 0 ? '#52c41a' : '#ff4d4f'
+                  color: portfolioSummary.overview.realizedPnL >= 0 ? '#52c41a' : '#ff4d4f'
                 }}
                 prefix={
-                  portfolioSummary.invest_profit_percent >= 0 ? <RiseOutlined /> : <FallOutlined />
+                  portfolioSummary.overview.realizedPnL >= 0 ? <RiseOutlined /> : <FallOutlined />
                 }
               />
             </Card>
@@ -1205,12 +1179,29 @@ const PortfolioPage: React.FC<PortfolioPageProps> = ({ onRefresh }) => {
           <Form.Item
             name="quantity"
             label="数量"
-            rules={[{ required: true, message: '请输入数量' }]}
+            rules={[
+              { required: true, message: '请输入数量' },
+              {
+                validator: (_, value) => {
+                  if (tradeType === 'sell') {
+                    const maxQty = tradeForm.getFieldValue('maxQuantity');
+                    if (value > maxQty) {
+                      return Promise.reject(new Error(`最多只能卖出 ${maxQty} 股`));
+                    }
+                  }
+                  if (value <= 0) {
+                    return Promise.reject(new Error('数量必须大于0'));
+                  }
+                  return Promise.resolve();
+                }
+              }
+            ]}
           >
             <InputNumber
               style={{ width: '100%' }}
               min={1}
-              max={tradeType === 'sell' ? selectedStock?.quantity || 0 : undefined}
+              max={tradeType === 'sell' ? undefined : undefined}
+              precision={0}
             />
           </Form.Item>
 
@@ -1231,7 +1222,7 @@ const PortfolioPage: React.FC<PortfolioPageProps> = ({ onRefresh }) => {
               borderRadius: 4
             }}>
               <Text type="secondary">
-                最多可卖出: {selectedStock?.quantity || 0} 股
+                最多可卖出: {selectedStock?.position.quantity || 0} 股
               </Text>
             </div>
           )}
@@ -1278,12 +1269,12 @@ const PortfolioPage: React.FC<PortfolioPageProps> = ({ onRefresh }) => {
               <div>
                 <Text strong>当前价格：</Text>
                 <Text style={{ fontSize: '18px', fontWeight: 'bold' }}>
-                  {formatPrice(selectedStock.stock.price)}
+                  {formatPrice(selectedStock.stock.market.price)}
                 </Text>
               </div>
               <div>
                 <Text strong>涨跌幅：</Text>
-                {formatChange(selectedStock.stock.change, selectedStock.stock.changePercent)}
+                {formatChange(selectedStock.stock.market.change, selectedStock.stock.market.changePercent)}
               </div>
             </Space>
 
