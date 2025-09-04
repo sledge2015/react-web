@@ -80,6 +80,8 @@ const PortfolioPage: React.FC<PortfolioPageProps> = ({ onRefresh }) => {
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc' | null>(null);
   const [visualizationVisible, setVisualizationVisible] = useState(false);
 
+  const [searchValue, setSearchValue] = useState('');
+
   // 获取用户股票列表
   const fetchUserStocks = useCallback(async () => {
     try {
@@ -116,28 +118,137 @@ const PortfolioPage: React.FC<PortfolioPageProps> = ({ onRefresh }) => {
       setSearchResults([]);
       return;
     }
+
     try {
       setSearchLoading(true);
       const response = await stockService.searchStocks(value);
-      if (response) {
-        // setSearchResults((response.data as StockSearchResult[]) || []);
+
+      // 修复：直接使用返回的数组数据
+      if (response && Array.isArray(response)) {
+        setSearchResults(response);
+      } else {
+        // 如果API返回格式不正确，使用空数组
+        setSearchResults([]);
       }
     } catch (error) {
       console.error('搜索股票失败:', error);
-      const fallbackResults: StockSearchResult[] = [
-        // { symbol: 'AAPL', name: 'Apple Inc.', type: 'Equity' },
-        // { symbol: 'GOOGL', name: 'Alphabet Inc.', type: 'Equity' },
-        // { symbol: 'MSFT', name: 'Microsoft Corporation', type: 'Equity' },
-        // { symbol: 'TSLA', name: 'Tesla Inc.', type: 'Equity' },
-        // { symbol: 'AMZN', name: 'Amazon.com Inc.', type: 'Equity' },
-      ];
-      setSearchResults(fallbackResults.filter(stock =>
+
+      // 提供更好的错误处理和后备搜索结果
+      const fallbackResults = [
+        { symbol: 'AAPL', name: 'Apple Inc.', type: 'Equity' },
+        { symbol: 'GOOGL', name: 'Alphabet Inc.', type: 'Equity' },
+        { symbol: 'MSFT', name: 'Microsoft Corporation', type: 'Equity' },
+        { symbol: 'TSLA', name: 'Tesla Inc.', type: 'Equity' },
+        { symbol: 'AMZN', name: 'Amazon.com Inc.', type: 'Equity' },
+        { symbol: 'NVDA', name: 'NVIDIA Corporation', type: 'Equity' },
+        { symbol: 'META', name: 'Meta Platforms Inc.', type: 'Equity' },
+        { symbol: 'NFLX', name: 'Netflix Inc.', type: 'Equity' },
+      ] as StockSearchResult[];
+
+      // 根据输入进行本地过滤
+      const filteredResults = fallbackResults.filter(stock =>
         stock.symbol.toLowerCase().includes(value.toLowerCase()) ||
         stock.name.toLowerCase().includes(value.toLowerCase())
-      ));
+      );
+
+      setSearchResults(filteredResults);
+
+      // 只在没有后备结果时显示错误消息
+      if (filteredResults.length === 0) {
+        message.warning('搜索服务暂时不可用，请稍后重试');
+      }
     } finally {
       setSearchLoading(false);
     }
+  };
+
+  // 3. 增强股票搜索组件
+  const StockSearchComponent = () => {
+
+    const handleSearchSelect = (value: string) => {
+      console.log('选择添加股票:', value);
+      handleAddStock(value);
+      setSearchValue(''); // 清空输入框
+    };
+
+    const handleSearchChange = (value: string) => {
+      setSearchValue(value);
+      handleSearch(value);
+    };
+
+    return (
+      <Card style={{ marginBottom: '24px' }}>
+        <Title level={5}>添加新股票</Title>
+        <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
+          <AutoComplete
+            value={searchValue}
+            style={{ flex: 1, maxWidth: '400px' }}
+            onSearch={handleSearchChange}
+            onSelect={handleSearchSelect}
+            onChange={setSearchValue}
+            notFoundContent={
+              searchLoading ? (
+                <div style={{ textAlign: 'center', padding: '12px' }}>
+                  <Spin size="small" />
+                  <div style={{ marginTop: '8px' }}>搜索中...</div>
+                </div>
+              ) : searchValue.trim() ? (
+                <div style={{ textAlign: 'center', padding: '12px', color: '#999' }}>
+                  未找到相关股票
+                </div>
+              ) : null
+            }
+            options={searchResults.map(result => ({
+              value: result.symbol,
+              label: (
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div>
+                    <span style={{ fontWeight: 'bold', color: '#1890ff' }}>{result.symbol}</span>
+                    <span style={{ marginLeft: '8px', color: '#666' }}>{result.name}</span>
+                  </div>
+                  <Tag color="blue" style={{ fontSize: '10px', padding: '0 4px', lineHeight: '16px' }}>
+                    {result.type}
+                  </Tag>
+                </div>
+              ),
+            }))}
+            filterOption={false} // 禁用本地过滤，使用服务端搜索
+          >
+            <Input
+              prefix={<SearchOutlined />}
+              placeholder="输入股票代码或公司名称搜索..."
+              size="large"
+              allowClear
+            />
+          </AutoComplete>
+
+          {/* 可选：添加快速添加按钮 */}
+          <Button
+            type="dashed"
+            size="large"
+            onClick={() => {
+              if (searchValue.trim() && /^[A-Z]{1,5}$/.test(searchValue.trim().toUpperCase())) {
+                handleAddStock(searchValue.trim().toUpperCase());
+              } else {
+                message.warning('请输入有效的股票代码（1-5个字母）');
+              }
+            }}
+            disabled={!searchValue.trim()}
+          >
+            直接添加
+          </Button>
+        </div>
+
+        {/* 搜索结果预览 */}
+        {searchResults.length > 0 && (
+          <div style={{ marginTop: '12px' }}>
+            <Text type="secondary" style={{ fontSize: '12px' }}>
+              找到 {searchResults.length} 个结果，点击选择添加到投资组合
+            </Text>
+          </div>
+        )}
+      </Card>
+    );
   };
 
   // 排序功能
@@ -570,17 +681,40 @@ const PortfolioPage: React.FC<PortfolioPageProps> = ({ onRefresh }) => {
   //添加股票
   const handleAddStock = async (symbol: string) => {
     try {
+      setLoading(true);
       const response = await stockService.addUserStock(symbol);
+
       if (response) {
         message.success(`已添加 ${symbol} 到您的投资组合`);
-        setSearchResults([]);
+        setSearchResults([]); // 清空搜索结果
+
+        // 修复：response本身就是UserStock类型，不需要访问.stock属性
         // 将新股票添加到列表中
-        const newStock = response.stock as Stock;
-        setUserStocks(prev => [...prev, newStock]);
-        fetchPortfolioSummary();
+        setUserStocks(prev => [...prev, response]);
+
+        // 刷新投资组合汇总数据
+        try {
+          await fetchPortfolioSummary();
+        } catch (summaryError) {
+          console.warn('刷新投资组合汇总失败:', summaryError);
+          // 不阻止添加股票的成功流程
+        }
+      } else {
+        throw new Error('添加股票返回数据为空');
       }
-    } catch (error) {
-      message.error('添加股票失败');
+    } catch (error: any) {
+      console.error('添加股票失败:', error);
+
+      // 提供更具体的错误信息
+      if (error.message?.includes('已存在')) {
+        message.warning(`${symbol} 已在您的投资组合中`);
+      } else if (error.message?.includes('not found')) {
+        message.error(`找不到股票代码 ${symbol}`);
+      } else {
+        message.error(`添加股票失败: ${error.message || '未知错误'}`);
+      }
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -1142,25 +1276,26 @@ const PortfolioPage: React.FC<PortfolioPageProps> = ({ onRefresh }) => {
       )}
 
       {/* 股票搜索 */}
-      <Card style={{ marginBottom: '24px' }}>
-        <Title level={5}>添加新股票</Title>
-        <AutoComplete
-          style={{ width: '100%', maxWidth: '400px' }}
-          onSearch={handleSearch}
-          onSelect={(value) => handleAddStock(value)}
-          notFoundContent={searchLoading ? <Spin size="small" /> : null}
-          options={searchResults.map(result => ({
-            value: result.symbol,
-            label: `${result.symbol} - ${result.name}`,
-          }))}
-        >
-          <Input
-            prefix={<SearchOutlined />}
-            placeholder="输入股票代码或公司名称搜索..."
-            size="large"
-          />
-        </AutoComplete>
-      </Card>
+      <StockSearchComponent />
+      {/*<Card style={{ marginBottom: '24px' }}>*/}
+      {/*  <Title level={5}>添加新股票</Title>*/}
+      {/*  <AutoComplete*/}
+      {/*    style={{ width: '100%', maxWidth: '400px' }}*/}
+      {/*    onSearch={handleSearch}*/}
+      {/*    onSelect={(value) => handleAddStock(value)}*/}
+      {/*    notFoundContent={searchLoading ? <Spin size="small" /> : null}*/}
+      {/*    options={searchResults.map(result => ({*/}
+      {/*      value: result.symbol,*/}
+      {/*      label: `${result.symbol} - ${result.name}`,*/}
+      {/*    }))}*/}
+      {/*  >*/}
+      {/*    <Input*/}
+      {/*      prefix={<SearchOutlined />}*/}
+      {/*      placeholder="输入股票代码或公司名称搜索..."*/}
+      {/*      size="large"*/}
+      {/*    />*/}
+      {/*  </AutoComplete>*/}
+      {/*</Card>*/}
 
       <Row gutter={[16, 16]}>
         {/* 股票列表 */}
