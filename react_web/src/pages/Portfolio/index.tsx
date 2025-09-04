@@ -47,6 +47,7 @@ import {
   Pie,
   Cell,
   Legend,
+  Treemap,
 } from 'recharts';
 import dayjs from 'dayjs';
 import { Decimal } from 'decimal.js';
@@ -278,12 +279,189 @@ const PortfolioPage: React.FC<PortfolioPageProps> = ({ onRefresh }) => {
       return <Empty description="暂无投资数据" />;
     }
 
+    // 权重归一化处理
+    const normalizeWeights = (data: any[]) => {
+      // 计算总权重
+      const totalWeight = data.reduce((sum, item) => sum + Math.max(0.01, item.sizeRatio), 0);
+
+      // 归一化处理，确保所有权重加起来等于100
+      return data.map(item => {
+        const normalizedWeight = (Math.max(0.01, item.sizeRatio) / totalWeight) * 100;
+        console.log("股票:",item.symbol)
+        console.log("归一化后权重:",normalizedWeight)
+
+        return {
+          ...item,
+          // Treemap需要的数据字段
+          name: item.symbol,
+          size: normalizedWeight, // 归一化后的权重
+          value: item.currentValue, // 实际投资金额
+          change: item.dailyChange,
+          changePercent: item.dailyChange,
+          weight: normalizedWeight,
+          // 用于颜色映射
+          fill: getHeatmapColor(item.colorType, item.colorIntensity)
+        };
+      });
+    };
+
+    const treemapData = normalizeWeights(heatmapData);
+    console.log("treemapData值:",treemapData)
+
+    // 自定义Treemap单元格内容
+    const CustomizedContent = (props: any) => {
+      const { root, depth, x, y, width, height} = props;
+      const symbol = props.symbol;
+      const fill = props.fill;
+      const change = props.change;
+      const currentValue = props.currentValue;
+      const weight = props.weight;
+
+      // 安全检查：确保payload存在
+      if (!symbol) {
+          console.log('symbol为空，跳过渲染');
+          return null;
+      }
+
+      // 计算字体大小基于区域大小
+      const area = width * height;
+      const fontSize = area > 8000 ? 16 : area > 4000 ? 14 : area > 2000 ? 12 : 10;
+      const showDetails = area > 3000; // 只在足够大的区域显示详细信息
+
+      return (
+        <g>
+          {/* 矩形背景 */}
+          <rect
+            x={x}
+            y={y}
+            width={width}
+            height={height}
+            style={{
+              fill: props.fill || '#d9d9d9',
+              stroke: 'rgba(255,255,255,0.6)',
+              strokeWidth: 2,
+              cursor: 'pointer'
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.stroke = '#1890ff';
+              e.currentTarget.style.strokeWidth = '3';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.stroke = 'rgba(255,255,255,0.6)';
+              e.currentTarget.style.strokeWidth = '2';
+            }}
+            onClick={() => {
+              const stock = userStocks.find(s => s.symbol === (props.symbol || props.name));
+              if (stock) handleViewStock(stock);
+            }}
+          />
+
+          {/* 股票代码 */}
+          <text
+            x={x + width / 2}
+            y={y + (showDetails ? height / 2 - 15 : height / 2 - 5)}
+            textAnchor="middle"
+            fill="#ffffff"
+            fontSize={fontSize}
+            fontWeight="bold"
+            dominantBaseline="middle"
+          >
+            {props.symbol || props.name || 'N/A'}
+          </text>
+
+          {/* 收益百分比 */}
+          <text
+            x={x + width / 2}
+            y={y + (showDetails ? height / 2 : height / 2 + 8)}
+            textAnchor="middle"
+            fill={props.change >= 0 ? "#ffffff" : "#ffffff"}
+            fontSize={Math.max(fontSize - 2, 9)}
+            fontWeight="600"
+            dominantBaseline="middle"
+          >
+            {props.change !== undefined ?
+              `${props.change >= 0 ? '+' : ''}${props.change.toFixed(2)}%` :
+              'N/A'
+            }
+          </text>
+
+          {/* 详细信息（仅在大区域显示） */}
+          {showDetails && props.currentValue !== undefined && (
+            <>
+              <text
+                x={x + width / 2}
+                y={y + height / 2 + 12}
+                textAnchor="middle"
+                fill="#6b7280"
+                fontSize={Math.max(fontSize - 4, 8)}
+                dominantBaseline="middle"
+              >
+                ${props.currentValue.toFixed(0)}
+              </text>
+              <text
+                x={x + width / 2}
+                y={y + height / 2 + 24}
+                textAnchor="middle"
+                fill="#9ca3af"
+                fontSize={Math.max(fontSize - 5, 7)}
+                dominantBaseline="middle"
+              >
+                权重 {props.weight ? props.weight.toFixed(1) : '0'}%
+              </text>
+            </>
+          )}
+
+          {/* 权重等级指示器 */}
+          {props.weight > 15 && (
+            <circle
+              cx={x + width - 8}
+              cy={y + 8}
+              r="3"
+              fill="#1890ff"
+              stroke="white"
+              strokeWidth="1"
+            />
+          )}
+        </g>
+      );
+    };
+
+    // 自定义Tooltip
+    const CustomTooltip = ({ active, payload }: any) => {
+      if (active && payload && payload.length) {
+        const data = payload[0].payload;
+        return (
+          <div style={{
+            backgroundColor: 'rgba(255, 255, 255, 0.95)',
+            padding: '12px',
+            border: '1px solid #d9d9d9',
+            borderRadius: '6px',
+            boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+            fontSize: '12px'
+          }}>
+            <div style={{ fontWeight: 'bold', marginBottom: '4px' }}>
+              {data.symbol} - {data.companyName || data.symbol}
+            </div>
+            <div style={{ color: data.change >= 0 ? '#52c41a' : '#ff4d4f' }}>
+              日收益: {data.change >= 0 ? '+' : ''}{data.change.toFixed(2)}%
+            </div>
+            <div>投资金额: ${data.currentValue.toFixed(2)}</div>
+            <div>投资权重: {data.weight.toFixed(2)}%</div>
+            <div style={{ fontSize: '10px', color: '#666', marginTop: '4px' }}>
+              点击查看详情
+            </div>
+          </div>
+        );
+      }
+      return null;
+    };
+
     return (
       <div style={{ padding: '20px' }}>
         <div style={{ marginBottom: '16px' }}>
           <Title level={4}>直观呈现您的投资信息</Title>
           <Text type="secondary">
-            每个方框的大小表示投资组合中相应投资的总价值，颜色表示当天的收益。
+            每个方框的大小表示投资组合中相应投资的总价值，颜色表示当天的收益。使用树状图算法完美分割固定矩形。
           </Text>
         </div>
 
@@ -296,7 +474,7 @@ const PortfolioPage: React.FC<PortfolioPageProps> = ({ onRefresh }) => {
               { label: '-2', color: '#ff7875' },
               { label: '-1', color: '#ffaaa5' },
               { label: '0', color: '#d9d9d9' },
-              { label: '+1', color: '#ffaaa5' },
+              { label: '+1', color: '#b7eb8f' },
               { label: '+2', color: '#73d13d' },
               { label: '≥ 3', color: '#389e0d' },
             ].map((item, index) => (
@@ -315,81 +493,68 @@ const PortfolioPage: React.FC<PortfolioPageProps> = ({ onRefresh }) => {
           </div>
         </div>
 
-        {/* 热力图网格 */}
-        <div
-          style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))',
-            gap: '8px',
-            maxHeight: '400px',
-            overflow: 'hidden'
-          }}
-        >
-          {heatmapData.map((item) => {
-            const baseSize = 120;
-            const width = Math.max(baseSize * item.sizeRatio, 60);
-            const height = Math.max(80 * item.sizeRatio, 50);
+        {/* 权重分布统计 */}
+        <div style={{ marginBottom: '16px', textAlign: 'center' }}>
+          <Space>
+            <Text type="secondary" style={{ fontSize: '12px' }}>
+              大权重 (&gt;15%): {treemapData.filter(d => d.weight > 15).length} 只
+            </Text>
+            <Text type="secondary" style={{ fontSize: '12px' }}>
+              中权重 (5-15%): {treemapData.filter(d => d.weight > 5 && d.weight <= 15).length} 只
+            </Text>
+            <Text type="secondary" style={{ fontSize: '12px' }}>
+              小权重 (&lt;5%): {treemapData.filter(d => d.weight <= 5).length} 只
+            </Text>
+          </Space>
+        </div>
 
-            return (
-              <div
-                key={item.symbol}
-                style={{
-                  width: `${width}px`,
-                  height: `${height}px`,
-                  backgroundColor: getHeatmapColor(item.colorType, item.colorIntensity),
-                  border: '1px solid rgba(0,0,0,0.1)',
-                  borderRadius: '4px',
-                  padding: '8px',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  justifyContent: 'center',
-                  alignItems: 'center',
-                  cursor: 'pointer',
-                  transition: 'transform 0.2s, box-shadow 0.2s',
-                  fontSize: width < 100 ? '12px' : '14px',
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.transform = 'scale(1.05)';
-                  e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.15)';
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.transform = 'scale(1)';
-                  e.currentTarget.style.boxShadow = 'none';
-                }}
-                onClick={() => {
-                  const stock = userStocks.find(s => s.symbol === item.symbol);
-                  if (stock) handleViewStock(stock);
-                }}
-              >
-                <div style={{
-                  fontWeight: 'bold',
-                  fontSize: width < 100 ? '14px' : '18px',
-                  color: '#000',
-                  textAlign: 'center'
-                }}>
-                  {item.symbol}
-                </div>
-                <div style={{
-                  fontSize: width < 100 ? '11px' : '13px',
-                  color: '#333',
-                  textAlign: 'center',
-                  marginTop: '4px'
-                }}>
-                  {item.dailyChange >= 0 ? '+' : ''}{item.dailyChange.toFixed(2)}%
-                </div>
-                {width > 100 && (
-                  <div style={{
-                    fontSize: '10px',
-                    color: '#666',
-                    textAlign: 'center',
-                    marginTop: '2px'
-                  }}>
-                    ${item.currentValue.toFixed(0)}
-                  </div>
-                )}
-              </div>
-            );
-          })}
+        {/* Treemap热力图 */}
+        <div style={{
+          width: '100%',
+          height: '400px',
+          backgroundColor: '#f8f9fa',
+          padding: '8px',
+          borderRadius: '8px',
+          border: '2px solid #e5e7eb'
+        }}>
+          <ResponsiveContainer width="100%" height="100%">
+            <Treemap
+              data={treemapData}
+              dataKey="size"
+              aspectRatio={4/3}
+              stroke="#fff"           // 改为纯白色
+              content={<CustomizedContent />}
+            >
+              <RechartsTooltip content={<CustomTooltip />} />
+            </Treemap>
+          </ResponsiveContainer>
+        </div>
+
+        {/* 布局统计信息 */}
+        <div style={{
+          marginTop: '16px',
+          textAlign: 'center',
+          color: '#666',
+          fontSize: '12px'
+        }}>
+          <Text type="secondary">
+            树状图布局：{treemapData.length} 只股票 |
+            权重归一化完成 |
+            最大权重：{Math.max(...treemapData.map(d => d.weight)).toFixed(1)}% |
+            最小权重：{Math.min(...treemapData.map(d => d.weight)).toFixed(1)}%
+          </Text>
+        </div>
+
+        {/* 操作提示 */}
+        <div style={{
+          marginTop: '8px',
+          textAlign: 'center',
+          color: '#999',
+          fontSize: '11px'
+        }}>
+          <Text type="secondary">
+            悬停查看详情 • 点击进入股票详情页面 • 蓝色圆点表示高权重股票
+          </Text>
         </div>
       </div>
     );
@@ -411,7 +576,7 @@ const PortfolioPage: React.FC<PortfolioPageProps> = ({ onRefresh }) => {
         setSearchResults([]);
         // 将新股票添加到列表中
         const newStock = response.stock as Stock;
-        // setUserStocks(prev => [...prev, newStock]);
+        setUserStocks(prev => [...prev, newStock]);
         fetchPortfolioSummary();
       }
     } catch (error) {
@@ -438,18 +603,28 @@ const PortfolioPage: React.FC<PortfolioPageProps> = ({ onRefresh }) => {
     setSelectedStock(stock);
     setTradeType('sell');
 
-    const maxQuantity = transaction ? transaction.execution.quantity : (stock.position.quantity || 0);
+    const maxQuantity = transaction ? transaction.execution.quantity:0;
     const currentPrice = stock.stock.market.price;
+
+    const selectedTradeId = transaction ? parseInt(transaction.id) : undefined;
+
+    console.log('设置表单值:', {
+      symbol: stock.symbol,
+      trade_id: selectedTradeId,
+      type: 'sell',
+      price: currentPrice,
+      quantity: transaction?.execution.quantity,
+      maxQuantity: maxQuantity,
+      });
 
     tradeForm.setFieldsValue({
       symbol: stock.symbol,
-      trade_id:transaction?.id,
+      trade_id:selectedTradeId,
       type: 'sell',
       price: currentPrice,
-      quantity: 1,
+      quantity: transaction?.execution.quantity,
       date: dayjs(),
       maxQuantity: maxQuantity,
-      transactionId: transaction?.id || null, // 如果是卖出特定交易，记录交易ID
     });
 
     setTradeModalVisible(true);
@@ -457,6 +632,7 @@ const PortfolioPage: React.FC<PortfolioPageProps> = ({ onRefresh }) => {
 
   //执行交易
   const handleExecuteTrade = async (values: any) => {
+    console.log('trade_id值:', values.trade_id);
     if (!selectedStock) return;
 
     try {
@@ -469,16 +645,15 @@ const PortfolioPage: React.FC<PortfolioPageProps> = ({ onRefresh }) => {
         quantity: values.quantity,
         date: values.date.format('YYYY-MM-DD'),
         total_amount: values.price * values.quantity,
-        transactionId: values.transactionId || null, // 用于部分卖出特定交易
+        trade_id: values.trade_id, //
       };
-
-      console.log('执行交易:', tradeData);
 
       // 调用交易API
       let response;
       if (tradeType === 'buy') {
+        console.log('执行交易买入:', tradeData);
         response = await stockService.buyStock(selectedStock.id, {
-          symbol: selectedStock.symbol,
+          symbol: tradeData.symbol,
           price: tradeData.price,
           quantity: tradeData.quantity,
           date: tradeData.date,
@@ -486,13 +661,12 @@ const PortfolioPage: React.FC<PortfolioPageProps> = ({ onRefresh }) => {
         });
       } else {
         response = await stockService.sellStock(selectedStock.id, {
-          trade_id: values.trade_id,
+          trade_id: tradeData.trade_id,
           stock_symbol: selectedStock.symbol,
           price: tradeData.price,
           quantity: tradeData.quantity,
           date: tradeData.date,
           total_amount: tradeData.total_amount,
-          transactionId: tradeData.transactionId,
         });
       }
 
@@ -505,7 +679,7 @@ const PortfolioPage: React.FC<PortfolioPageProps> = ({ onRefresh }) => {
         // 刷新数据
         await Promise.all([
           fetchUserStocks(),
-          fetchPortfolioSummary(),
+          //fetchPortfolioSummary(),
         ]);
       } else {
         throw new Error('交易失败');
@@ -528,7 +702,7 @@ const PortfolioPage: React.FC<PortfolioPageProps> = ({ onRefresh }) => {
       // 刷新数据
       await Promise.all([
         fetchUserStocks(),
-        fetchPortfolioSummary(),
+        //fetchPortfolioSummary(),
       ]);
     } catch (error) {
       message.error('删除交易记录失败');
@@ -569,7 +743,7 @@ const PortfolioPage: React.FC<PortfolioPageProps> = ({ onRefresh }) => {
     setLoading(true);
     await Promise.all([
       fetchUserStocks(),
-      fetchPortfolioSummary(),
+      //fetchPortfolioSummary(),
     ]);
     setLoading(false);
     message.success('投资组合数据已刷新');
@@ -636,7 +810,7 @@ const PortfolioPage: React.FC<PortfolioPageProps> = ({ onRefresh }) => {
   };
 
   // 渲染交易历史子表格
-  const renderTransactionTable = (transactions: Transaction[]) => {
+  const renderTransactionTable = (transactions: Transaction[], parentStock: UserStock) => {
     const transactionColumns = [
       {
         title: '购买日期',
@@ -679,66 +853,57 @@ const PortfolioPage: React.FC<PortfolioPageProps> = ({ onRefresh }) => {
       },
       {
         title: '市值',
-        key: 'assetmarketvalue',
+        key: 'totalValue',
         width: 100,
         render: (_: any, record: Transaction) => {
           return formatPrice(record.execution.totalValue || 0);
         },
       },
       {
-        title: '',
+        title: '操作',
         key: 'actions',
-        width: 40,
-           render: (_: any, record: Transaction) => {
-              const menuItems: MenuProps['items'] = [
-                {
-                  key: 'sell',
-                  label: '卖出',
-                  icon: <FallOutlined />,
-                  onClick: () => {
-                    // 找到对应的股票记录
-                    const stock = userStocks.find(s =>
-                      s.transactions?.some(t => t.id === record.id)
-                    );
-                    if (stock) {
-                      handleSellStock(stock, record);
-                    }
-                  },
-                },
-                {
-                  key: 'delete',
-                  label: '删除交易',
-                  icon: <DeleteOutlined />,
-                  danger: true,
-                  onClick: () => {
-                    const stock = userStocks.find(s =>
-                      s.transactions?.some(t => t.id === record.id)
-                    );
-                    if (stock) {
-                      Modal.confirm({
-                        title: '确认删除',
-                        content: `确定要删除 ${stock.symbol} 在 ${record.execution.date} 的交易记录吗？`,
-                        okText: '删除',
-                        okType: 'danger',
-                        cancelText: '取消',
-                        onOk: () => handleDeleteTransaction(record.id),
-                      });
-                    }
-                  },
-                },
-              ];
+        width: 120,
+        render: (_: any, record: Transaction) => (
+          <Space>
+            {/* 卖出按钮 */}
+            <Button
+              type="primary"
+              size="small"
+              danger
+              icon={<FallOutlined />}
+              onClick={(e) => {
+                e.stopPropagation(); // 防止触发行点击事件
+                console.log('卖出交易 - ID:', record.id);
+                handleSellStock(parentStock, record);
+              }}
+            >
+              卖出
+            </Button>
 
-              return (
-                <Dropdown
-                  menu={{ items: menuItems }}
-                  trigger={['click']}
-                >
-                  <Button type="text" icon={<MoreOutlined />} />
-                </Dropdown>
-                );
-            },
+            {/* 删除按钮 */}
+            <Button
+              type="text"
+              size="small"
+              danger
+              icon={<DeleteOutlined />}
+              onClick={(e) => {
+                e.stopPropagation(); // 防止触发行点击事件
+                console.log('删除交易 - ID:', record.id);
+                Modal.confirm({
+                  title: '确认删除',
+                  content: `确定要删除 ${parentStock.symbol} 在 ${record.execution.date} 的交易记录吗？`,
+                  okText: '删除',
+                  okType: 'danger',
+                  cancelText: '取消',
+                  onOk: () => handleDeleteTransaction(record.id), // 直接使用 record.id
+                });
+              }}
+            />
+          </Space>
+        ),
       },
     ];
+
     return (
       <Table
         columns={transactionColumns}
@@ -853,9 +1018,9 @@ const PortfolioPage: React.FC<PortfolioPageProps> = ({ onRefresh }) => {
         const menuItems: MenuProps['items'] = [
           {
             key: 'buy',
-            label: '买入',
+            label: '记录一次买入',
             icon: <ShoppingCartOutlined />,
-            onClick: () => handleExecuteTrade(record),
+            onClick: () => handleBuyStock(record),
           },
           {
             key: 'view',
@@ -1001,7 +1166,7 @@ const PortfolioPage: React.FC<PortfolioPageProps> = ({ onRefresh }) => {
         {/* 股票列表 */}
         <Col xs={24} xl={16}>
           <Card
-            title="我的股票"
+            title="持仓股票"
             extra={
               <Space>
                 <Dropdown
@@ -1054,7 +1219,7 @@ const PortfolioPage: React.FC<PortfolioPageProps> = ({ onRefresh }) => {
                 expandable={{
                   expandedRowRender: (record) => (
                     <div style={{ padding: '0 24px' }}>
-                      {record.transactions && renderTransactionTable(record.transactions)}
+                      {record.transactions && renderTransactionTable(record.transactions, record)}
                       <Button
                         type="dashed"
                         size="small"
@@ -1163,6 +1328,10 @@ const PortfolioPage: React.FC<PortfolioPageProps> = ({ onRefresh }) => {
           layout="vertical"
           onFinish={handleExecuteTrade}
         >
+          {/* 所有隐藏字段放在一起 */}
+          <Form.Item name="trade_id" hidden>
+            <InputNumber />
+          </Form.Item>
           <Form.Item
             name="price"
             label="价格"
