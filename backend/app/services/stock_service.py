@@ -128,9 +128,7 @@ class StockService:
 			
 			if not df.empty:
 				# 转换成 Timestamp
-				df['datetime'] = pd.to_datetime(df['datetime']).dt.tz_localize(None)
-				df.set_index('datetime', inplace=True)
-				
+				df['datetime'] = pd.to_datetime(df['datetime'], errors='coerce')
 				# 转换成数值型
 				df['close'] = pd.to_numeric(df['close'], errors='coerce')
 				# 排序并重置索引
