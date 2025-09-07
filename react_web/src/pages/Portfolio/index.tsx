@@ -20,6 +20,8 @@ import {
   DatePicker,
   Tag,
   Dropdown,
+  Radio,          // 新增
+  Tooltip,        // 新增
   MenuProps,
 } from 'antd';
 import {
@@ -33,6 +35,8 @@ import {
   EditOutlined,
   DownOutlined,
   MoreOutlined,
+  SwapOutlined,
+  LineChartOutlined,
   ShoppingCartOutlined,
 } from '@ant-design/icons';
 import {
@@ -48,10 +52,16 @@ import {
   Cell,
   Legend,
   Treemap,
+  LineChart,    // 新增
+  Line,         // 新增
+  ReferenceLine, // 新增
+  AreaChart,     // 新增
+  Area,          // 新增
+  Brush     // 新增
 } from 'recharts';
 import dayjs from 'dayjs';
-import { Decimal } from 'decimal.js';
-import { stockService } from '../../services/stockService';
+import { debounce } from 'lodash';
+import { stockService } from '../../services/portfolioService';
 import { UserStock,PortfolioSummary,StockSearchResult,Stock,Transaction } from '../../types/stock'
 const { Title, Text } = Typography;
 
@@ -80,7 +90,12 @@ const PortfolioPage: React.FC<PortfolioPageProps> = ({ onRefresh }) => {
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc' | null>(null);
   const [visualizationVisible, setVisualizationVisible] = useState(false);
 
+  const { RangePicker } = DatePicker;  // 新增
   const [searchValue, setSearchValue] = useState('');
+  const [searchModalVisible, setSearchModalVisible] = useState(false); //添加搜索弹窗状态（在现有状态定义处添加）
+  const [comparisonData, setComparisonData] = useState<any[]>([]); //对比分析图
+  const [selectedPeriod, setSelectedPeriod] = useState('1M');
+  const [customDateRange, setCustomDateRange] = useState<any>(null);
 
   // 获取用户股票列表
   const fetchUserStocks = useCallback(async () => {
@@ -88,7 +103,6 @@ const PortfolioPage: React.FC<PortfolioPageProps> = ({ onRefresh }) => {
       const response = await stockService.getUserStocks()
       if (response) {
         const stockData = response as UserStock[];
-        // 如果API返回空数据
         setUserStocks(stockData);
         console.log("获取股票值不为空:",stockData)
       }
@@ -112,144 +126,64 @@ const PortfolioPage: React.FC<PortfolioPageProps> = ({ onRefresh }) => {
     }
   }, []);
 
-  // 搜索股票
-  const handleSearch = async (value: string) => {
-    if (!value.trim()) {
-      setSearchResults([]);
-      return;
-    }
-
-    try {
-      setSearchLoading(true);
-      const response = await stockService.searchStocks(value);
-
-      // 修复：直接使用返回的数组数据
-      if (response && Array.isArray(response)) {
-        setSearchResults(response);
-      } else {
-        // 如果API返回格式不正确，使用空数组
+  // 创建防抖搜索函数
+  const debouncedSearch = useCallback(
+    debounce(async (value: string) => {
+      console.log('debouncedSearch 进入抖动搜索函数:', value);
+      if (!value.trim()) {
         setSearchResults([]);
+        return;
       }
-    } catch (error) {
-      console.error('搜索股票失败:', error);
 
-      // 提供更好的错误处理和后备搜索结果
-      const fallbackResults = [
-        { symbol: 'AAPL', name: 'Apple Inc.', type: 'Equity' },
-        { symbol: 'GOOGL', name: 'Alphabet Inc.', type: 'Equity' },
-        { symbol: 'MSFT', name: 'Microsoft Corporation', type: 'Equity' },
-        { symbol: 'TSLA', name: 'Tesla Inc.', type: 'Equity' },
-        { symbol: 'AMZN', name: 'Amazon.com Inc.', type: 'Equity' },
-        { symbol: 'NVDA', name: 'NVIDIA Corporation', type: 'Equity' },
-        { symbol: 'META', name: 'Meta Platforms Inc.', type: 'Equity' },
-        { symbol: 'NFLX', name: 'Netflix Inc.', type: 'Equity' },
-      ] as StockSearchResult[];
+      try {
+        setSearchLoading(true);
+        console.log('debouncedSearch 开始调用后端接口:', value);
+        const response = await stockService.searchStocks(value);
+        console.log('debouncedSearch 结束调用后端接口:', response);
 
-      // 根据输入进行本地过滤
-      const filteredResults = fallbackResults.filter(stock =>
-        stock.symbol.toLowerCase().includes(value.toLowerCase()) ||
-        stock.name.toLowerCase().includes(value.toLowerCase())
-      );
+        if (response && Array.isArray(response)) {
+          setSearchResults(response);
+        } else {
+          setSearchResults([]);
+        }
+      } catch (error) {
+        console.error('搜索股票失败:', error);
 
-      setSearchResults(filteredResults);
+        // 设置备用数据
+        const fallbackResults = [
+          {
+            symbol: 'AAPL',
+            name: 'Apple Inc.',
+            type: 'Equity',
+            market: { exchange: 'NASDAQ', currency: 'USD' },
+            matchScore: 1.0
+          },
+          // ... 其他备用数据
+        ] as StockSearchResult[];
 
-      // 只在没有后备结果时显示错误消息
-      if (filteredResults.length === 0) {
-        message.warning('搜索服务暂时不可用，请稍后重试');
+        const filteredResults = fallbackResults.filter(stock =>
+          stock.symbol.toLowerCase().includes(value.toLowerCase()) ||
+          stock.name.toLowerCase().includes(value.toLowerCase())
+        );
+
+        setSearchResults(filteredResults);
+
+        if (filteredResults.length === 0) {
+          message.warning('搜索服务暂时不可用，请稍后重试');
+        }
+      } finally {
+        setSearchLoading(false);
       }
-    } finally {
-      setSearchLoading(false);
-    }
-  };
+    }, 300),
+    []
+  );
 
-  // 3. 增强股票搜索组件
-  const StockSearchComponent = () => {
-
-    const handleSearchSelect = (value: string) => {
-      console.log('选择添加股票:', value);
-      handleAddStock(value);
-      setSearchValue(''); // 清空输入框
-    };
-
-    const handleSearchChange = (value: string) => {
-      setSearchValue(value);
-      handleSearch(value);
-    };
-
-    return (
-      <Card style={{ marginBottom: '24px' }}>
-        <Title level={5}>添加新股票</Title>
-        <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
-          <AutoComplete
-            value={searchValue}
-            style={{ flex: 1, maxWidth: '400px' }}
-            onSearch={handleSearchChange}
-            onSelect={handleSearchSelect}
-            onChange={setSearchValue}
-            notFoundContent={
-              searchLoading ? (
-                <div style={{ textAlign: 'center', padding: '12px' }}>
-                  <Spin size="small" />
-                  <div style={{ marginTop: '8px' }}>搜索中...</div>
-                </div>
-              ) : searchValue.trim() ? (
-                <div style={{ textAlign: 'center', padding: '12px', color: '#999' }}>
-                  未找到相关股票
-                </div>
-              ) : null
-            }
-            options={searchResults.map(result => ({
-              value: result.symbol,
-              label: (
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <div>
-                    <span style={{ fontWeight: 'bold', color: '#1890ff' }}>{result.symbol}</span>
-                    <span style={{ marginLeft: '8px', color: '#666' }}>{result.name}</span>
-                  </div>
-                  <Tag color="blue" style={{ fontSize: '10px', padding: '0 4px', lineHeight: '16px' }}>
-                    {result.type}
-                  </Tag>
-                </div>
-              ),
-            }))}
-            filterOption={false} // 禁用本地过滤，使用服务端搜索
-          >
-            <Input
-              prefix={<SearchOutlined />}
-              placeholder="输入股票代码或公司名称搜索..."
-              size="large"
-              allowClear
-            />
-          </AutoComplete>
-
-          {/* 可选：添加快速添加按钮 */}
-          <Button
-            type="dashed"
-            size="large"
-            onClick={() => {
-              if (searchValue.trim() && /^[A-Z]{1,5}$/.test(searchValue.trim().toUpperCase())) {
-                handleAddStock(searchValue.trim().toUpperCase());
-              } else {
-                message.warning('请输入有效的股票代码（1-5个字母）');
-              }
-            }}
-            disabled={!searchValue.trim()}
-          >
-            直接添加
-          </Button>
-        </div>
-
-        {/* 搜索结果预览 */}
-        {searchResults.length > 0 && (
-          <div style={{ marginTop: '12px' }}>
-            <Text type="secondary" style={{ fontSize: '12px' }}>
-              找到 {searchResults.length} 个结果，点击选择添加到投资组合
-            </Text>
-          </div>
-        )}
-      </Card>
-    );
-  };
+  // 搜索股票
+  const handleSearch = useCallback((value: string) => {
+    setSearchValue(value);
+    // 只使用防抖搜索，移除重复的直接搜索
+    debouncedSearch(value);
+  }, [debouncedSearch]);
 
   // 排序功能
   const handleSort = (field: string) => {
@@ -271,8 +205,8 @@ const PortfolioPage: React.FC<PortfolioPageProps> = ({ onRefresh }) => {
           bValue = b.stock.companyName;
           break;
         case 'price':
-          aValue = a.stock.market.price;
-          bValue = b.stock.market.price;
+          aValue = a.position.price;
+          bValue = b.position.price;
           break;
         case 'quantity':
           aValue = a.position.quantity || 0;
@@ -308,6 +242,10 @@ const PortfolioPage: React.FC<PortfolioPageProps> = ({ onRefresh }) => {
 
   // 生成热力图数据
   const generateHeatmapData = () => {
+    const validStocks = userStocks.filter(stock =>
+      stock && stock.position && stock.performance && stock.stock
+    );
+
     if (!userStocks.length) return [];
 
     // 计算总投资价值用于相对大小
@@ -687,8 +625,9 @@ const PortfolioPage: React.FC<PortfolioPageProps> = ({ onRefresh }) => {
       if (response) {
         message.success(`已添加 ${symbol} 到您的投资组合`);
         setSearchResults([]); // 清空搜索结果
+        setSearchValue('');   // 清空搜索框
+        setSearchModalVisible(false); // 关闭搜索弹窗
 
-        // 修复：response本身就是UserStock类型，不需要访问.stock属性
         // 将新股票添加到列表中
         setUserStocks(prev => [...prev, response]);
 
@@ -697,7 +636,6 @@ const PortfolioPage: React.FC<PortfolioPageProps> = ({ onRefresh }) => {
           await fetchPortfolioSummary();
         } catch (summaryError) {
           console.warn('刷新投资组合汇总失败:', summaryError);
-          // 不阻止添加股票的成功流程
         }
       } else {
         throw new Error('添加股票返回数据为空');
@@ -705,7 +643,6 @@ const PortfolioPage: React.FC<PortfolioPageProps> = ({ onRefresh }) => {
     } catch (error: any) {
       console.error('添加股票失败:', error);
 
-      // 提供更具体的错误信息
       if (error.message?.includes('已存在')) {
         message.warning(`${symbol} 已在您的投资组合中`);
       } else if (error.message?.includes('not found')) {
@@ -716,7 +653,7 @@ const PortfolioPage: React.FC<PortfolioPageProps> = ({ onRefresh }) => {
     } finally {
       setLoading(false);
     }
-  };
+    };
 
   // 买入股票
   const handleBuyStock = (stock: UserStock) => {
@@ -725,7 +662,7 @@ const PortfolioPage: React.FC<PortfolioPageProps> = ({ onRefresh }) => {
     tradeForm.setFieldsValue({
       symbol: stock.symbol,
       type: 'buy',
-      price: stock.stock.market.price,
+      price: stock.position.price,
       quantity: 1,
       date: dayjs(),
     });
@@ -738,7 +675,7 @@ const PortfolioPage: React.FC<PortfolioPageProps> = ({ onRefresh }) => {
     setTradeType('sell');
 
     const maxQuantity = transaction ? transaction.execution.quantity:0;
-    const currentPrice = stock.stock.market.price;
+    const currentPrice = stock.position.price;
 
     const selectedTradeId = transaction ? parseInt(transaction.id) : undefined;
 
@@ -772,12 +709,29 @@ const PortfolioPage: React.FC<PortfolioPageProps> = ({ onRefresh }) => {
     try {
       setLoading(true);
 
+      // 安全处理日期格式化
+      let formattedDate: string;
+      if (values.date) {
+        // 确保 values.date 是 dayjs 对象
+        if (typeof values.date.format === 'function') {
+          formattedDate = values.date.format('YYYY-MM-DD');
+        } else {
+          // 如果不是 dayjs 对象，尝试转换
+          formattedDate = dayjs(values.date).format('YYYY-MM-DD');
+        }
+      } else {
+        // 如果没有日期，使用当天
+        formattedDate = dayjs().format('YYYY-MM-DD');
+      }
+
+      console.log('格式化后的日期:', formattedDate);
+
       const tradeData = {
         symbol: selectedStock.symbol,
         type: tradeType,
         price: values.price,
         quantity: values.quantity,
-        date: values.date.format('YYYY-MM-DD'),
+        date: formattedDate,
         total_amount: values.price * values.quantity,
         trade_id: values.trade_id, //
       };
@@ -828,18 +782,24 @@ const PortfolioPage: React.FC<PortfolioPageProps> = ({ onRefresh }) => {
   };
 
   // 删除股票
-  const handleDeleteTransaction = async (transactionId: string) => {
+  const handleDeleteTransaction = async (stock_id: string, stockSymbol?: string) => {
     try {
-      await stockService.deleteTransaction(transactionId);
-      message.success(`已删除 ${transactionId} 的交易记录`);
+      await stockService.deleteTransaction(stock_id);
+      message.success(`已从持仓列表中移除 ${stockSymbol} 的股票`);
 
       // 刷新数据
       await Promise.all([
         fetchUserStocks(),
-        //fetchPortfolioSummary(),
+        fetchPortfolioSummary(), // 建议也刷新汇总数据
       ]);
-    } catch (error) {
-      message.error('删除交易记录失败');
+
+    } catch (error: any) {
+      console.error('删除交易记录失败:', error);
+
+      const errorMessage = error?.response?.data?.detail ||
+                          error?.message ||
+                          '删除交易记录失败';
+      message.error(errorMessage);
     }
   };
 
@@ -872,16 +832,399 @@ const PortfolioPage: React.FC<PortfolioPageProps> = ({ onRefresh }) => {
     }
   };
 
+  // 时间段配置移到主组件
+  const TIME_PERIODS = [
+    { key: '7D', label: '7天', days: 7 },
+    { key: '1M', label: '1个月', days: 30 },
+    { key: '3M', label: '3个月', days: 90 },
+    { key: '6M', label: '6个月', days: 180 },
+    { key: '1Y', label: '1年', days: 365 },
+    { key: 'YTD', label: '年初至今', days: null },
+    { key: 'ALL', label: '全部', days: null }
+  ];
+
+  // 提取到主组件的 fetchDataForPeriod
+  const fetchDataForPeriod = useCallback(async (period?: string, customRange?: any) => {
+    try {
+      const targetPeriod = period || selectedPeriod;
+      const targetRange = customRange || customDateRange;
+
+      let days: number;
+
+      if (targetPeriod === 'CUSTOM' && targetRange) {
+        const startDate = dayjs(targetRange[0]);
+        const endDate = dayjs(targetRange[1]);
+        days = endDate.diff(startDate, 'day') + 1;
+      } else if (targetPeriod === 'YTD') {
+        const startOfYear = dayjs().startOf('year');
+        days = dayjs().diff(startOfYear, 'day') + 1;
+      } else if (targetPeriod === 'ALL') {
+        days = 730;
+      } else {
+        const periodConfig = TIME_PERIODS.find(p => p.key === targetPeriod);
+        days = periodConfig?.days || 30;
+      }
+
+      const [portfolioHistory, marketHistory] = await Promise.all([
+        stockService.getPortfolioPerformanceHistory(days),
+        stockService.getMarketIndicesHistory(days)
+      ]);
+
+      if (!portfolioHistory || !marketHistory) {
+        throw new Error('数据获取失败');
+      }
+
+      const data = portfolioHistory.map((item: any) => {
+        const marketData = marketHistory.find((m: any) => m.date === item.date) || {};
+
+        const portfolioReturn = item.gainLossPercent || 0;
+        const sp500Return = (marketData.sp500Return || 0) * 100;
+        const nasdaqReturn = (marketData.nasdaqReturn || 0) * 100;
+
+        return {
+          date: new Date(item.date).toLocaleDateString('zh-CN', { month: '2-digit', day: '2-digit' }),
+          fullDate: new Date(item.date).toLocaleDateString('zh-CN'),
+          portfolio: portfolioReturn.toFixed(2),
+          sp500: sp500Return.toFixed(2),
+          nasdaq: nasdaqReturn.toFixed(2),
+          portfolioValue: (item.totalValue || 0).toFixed(2),
+          timestamp: new Date(item.date).getTime()
+        };
+      });
+
+      setComparisonData(data);
+      return data;
+    } catch (error) {
+      console.error('获取对比数据失败:', error);
+      return [];
+    }
+  }, [selectedPeriod, customDateRange]);
+
+
+  // 投资组合对比图表组件
+  const PortfolioComparisonChart = ({
+    comparisonData,
+    selectedPeriod,
+    setSelectedPeriod,
+    customDateRange,
+    setCustomDateRange,
+    onPeriodChange,
+    TIME_PERIODS
+  }: {
+    comparisonData: any[];
+    selectedPeriod: string;
+    setSelectedPeriod: (period: string) => void;
+    customDateRange: any;
+    setCustomDateRange: (range: any) => void;
+    onPeriodChange: (period: string, customRange?: any) => void;
+    TIME_PERIODS: any[];
+  }) => {
+    const [chartLoading, setChartLoading] = useState(false);
+
+    // 移除组件内的状态管理，使用传入的props
+
+    if (comparisonData.length === 0) {
+      return (
+        <Card style={{ marginBottom: '24px' }}>
+          <div style={{ textAlign: 'center', padding: '40px' }}>
+            <Empty description="暂无对比数据" />
+          </div>
+        </Card>
+      );
+    }
+
+    const latestData = comparisonData[comparisonData.length - 1];
+    const portfolioReturn = parseFloat(latestData.portfolio);
+    const sp500Return = parseFloat(latestData.sp500);
+    const nasdaqReturn = parseFloat(latestData.nasdaq);
+
+    return (
+      <Card style={{ marginBottom: '24px' }}>
+
+        {/* 时间段选择器 */}
+        <div style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          padding: '12px 16px',
+          backgroundColor: '#fafafa',
+          borderRadius: '6px',
+          border: '1px solid #f0f0f0',
+          marginBottom: '16px'
+        }}>
+          <div>
+            <Text strong style={{ marginRight: '16px' }}>时间范围:</Text>
+            <Radio.Group
+              value={selectedPeriod}
+              onChange={(e) => {
+                const period = e.target.value;
+                setSelectedPeriod(period);
+                if (period !== 'CUSTOM') {
+                  onPeriodChange(period);
+                }
+              }}
+              size="small"
+            >
+              {TIME_PERIODS.map(period => (
+                <Radio.Button key={period.key} value={period.key}>
+                  {period.label}
+                </Radio.Button>
+              ))}
+            </Radio.Group>
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <Text type="secondary">自定义:</Text>
+            <RangePicker
+              size="small"
+              value={customDateRange}
+              onChange={(dates) => {
+                setCustomDateRange(dates);
+                if (dates && dates[0] && dates[1]) {
+                  setSelectedPeriod('CUSTOM');
+                  onPeriodChange('CUSTOM', dates);
+                }
+              }}
+              disabledDate={(current) => current && current > dayjs().endOf('day')}
+            />
+          </div>
+        </div>
+
+        <ResponsiveContainer width="100%" height={400}>
+          <AreaChart data={comparisonData} margin={{ top: 20, right: 30, left: 20, bottom: 60 }}>
+            <defs>
+              <linearGradient id="portfolioGradient" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="5%" stopColor="#1890ff" stopOpacity={0.8}/>
+                <stop offset="95%" stopColor="#1890ff" stopOpacity={0.1}/>
+              </linearGradient>
+            </defs>
+
+            <CartesianGrid strokeDasharray="1 1" stroke="#f0f0f0" strokeOpacity={0.5} />
+            <XAxis
+              dataKey="date"
+              axisLine={false}
+              tickLine={false}
+              tick={{ fontSize: 11, fill: '#666' }}
+              angle={-45}
+              textAnchor="end"
+              height={60}
+            />
+            <YAxis
+              axisLine={false}
+              tickLine={false}
+              tick={{ fontSize: 11, fill: '#666' }}
+              tickFormatter={(value) => `${value}%`}
+            />
+
+            <RechartsTooltip content={({ active, payload, label }) => {
+              if (active && payload && payload.length) {
+                return (
+                  <div style={{
+                    backgroundColor: 'rgba(255, 255, 255, 0.95)',
+                    padding: '12px',
+                    border: '1px solid #d9d9d9',
+                    borderRadius: '6px',
+                    boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+                    fontSize: '12px'
+                  }}>
+                    <div style={{ fontWeight: 'bold', marginBottom: '8px' }}>
+                      {payload[0]?.payload?.fullDate}
+                    </div>
+                    {payload.map((entry: any, index: number) => (
+                      <div key={index} style={{
+                        color: entry.color,
+                        marginBottom: '4px',
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        gap: '16px'
+                      }}>
+                        <span>{entry.name}:</span>
+                        <span style={{ fontWeight: 'bold' }}>
+                          {entry.value > 0 ? '+' : ''}{entry.value}%
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                );
+              }
+              return null;
+            }} />
+
+            <Legend
+              wrapperStyle={{ paddingTop: '20px' }}
+              iconType="line"
+            />
+
+            {/* 投资组合收益 - 曲面图 */}
+            <Area
+              type="monotone"
+              dataKey="portfolio"
+              stroke="#1890ff"
+              strokeWidth={3}
+              fill="url(#portfolioGradient)"
+              name="我的投资组合"
+              dot={false}
+              activeDot={{ r: 6, stroke: '#1890ff', strokeWidth: 2 }}
+            />
+
+            {/* 标普500 - 曲线图 */}
+            <Line
+              type="monotone"
+              dataKey="sp500"
+              stroke="#52c41a"
+              strokeWidth={2}
+              name="标普500"
+              dot={false}
+            />
+
+            {/* 纳斯达克 - 曲线图 */}
+            <Line
+              type="monotone"
+              dataKey="nasdaq"
+              stroke="#faad14"
+              strokeWidth={2}
+              name="纳斯达克"
+              dot={false}
+            />
+
+            <ReferenceLine y={0} stroke="#d9d9d9" />
+
+            {/* 长时间段数据添加刷选器 */}
+            {comparisonData.length > 90 && (
+              <Brush dataKey="date" height={30} stroke="#1890ff" />
+            )}
+          </AreaChart>
+        </ResponsiveContainer>
+
+         {/*在图表下方添加*/}
+          <div style={{
+            marginTop: '20px',
+            padding: '20px',
+            backgroundColor: '#fafafa',
+            borderRadius: '8px',
+            border: '1px solid #f0f0f0'
+          }}>
+            <div style={{
+              marginBottom: '16px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between'
+            }}>
+              <Text strong style={{ fontSize: '14px', color: '#262626' }}>
+                相对表现分析
+              </Text>
+              <Text type="secondary" style={{ fontSize: '12px' }}>
+                基于当前周期收益率
+              </Text>
+            </div>
+
+            <Row gutter={[20, 16]}>
+              <Col span={12}>
+                <div style={{
+                  padding: '16px 20px',
+                  backgroundColor: 'white',
+                  borderRadius: '6px',
+                  border: '1px solid #e8e8e8',
+                  boxShadow: '0 2px 4px rgba(0,0,0,0.02)'
+                }}>
+                  <div style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center'
+                  }}>
+                    <div>
+                      <Text style={{ fontSize: '13px', color: '#8c8c8c' }}>vs 标普500</Text>
+                      <div style={{ fontSize: '10px', color: '#bfbfbf', marginTop: '2px' }}>
+                        相对收益率
+                      </div>
+                    </div>
+                    <div style={{ textAlign: 'right' }}>
+                      <div style={{
+                        fontSize: '20px',
+                        fontWeight: 'bold',
+                        fontFamily: 'monospace',
+                        color: portfolioReturn - sp500Return >= 0 ? '#52c41a' : '#ff4d4f'
+                      }}>
+                        {portfolioReturn - sp500Return >= 0 ? '+' : ''}
+                        {(portfolioReturn - sp500Return).toFixed(2)}%
+                      </div>
+                      <div style={{
+                        fontSize: '10px',
+                        color: portfolioReturn - sp500Return >= 0 ? '#52c41a' : '#ff4d4f',
+                        fontWeight: '500'
+                      }}>
+                        {portfolioReturn - sp500Return >= 0 ? '跑赢指数' : '跑输指数'}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </Col>
+
+              <Col span={12}>
+                <div style={{
+                  padding: '16px 20px',
+                  backgroundColor: 'white',
+                  borderRadius: '6px',
+                  border: '1px solid #e8e8e8',
+                  boxShadow: '0 2px 4px rgba(0,0,0,0.02)'
+                }}>
+                  <div style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center'
+                  }}>
+                    <div>
+                      <Text style={{ fontSize: '13px', color: '#8c8c8c' }}>vs 纳斯达克</Text>
+                      <div style={{ fontSize: '10px', color: '#bfbfbf', marginTop: '2px' }}>
+                        相对收益率
+                      </div>
+                    </div>
+                    <div style={{ textAlign: 'right' }}>
+                      <div style={{
+                        fontSize: '20px',
+                        fontWeight: 'bold',
+                        fontFamily: 'monospace',
+                        color: portfolioReturn - nasdaqReturn >= 0 ? '#52c41a' : '#ff4d4f'
+                      }}>
+                        {portfolioReturn - nasdaqReturn >= 0 ? '+' : ''}
+                        {(portfolioReturn - nasdaqReturn).toFixed(2)}%
+                      </div>
+                      <div style={{
+                        fontSize: '10px',
+                        color: portfolioReturn - nasdaqReturn >= 0 ? '#52c41a' : '#ff4d4f',
+                        fontWeight: '500'
+                      }}>
+                        {portfolioReturn - nasdaqReturn >= 0 ? '跑赢指数' : '跑输指数'}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </Col>
+            </Row>
+          </div>
+      </Card>
+    );
+  };
+
   // 刷新所有数据
   const refreshAllData = useCallback(async () => {
     setLoading(true);
-    await Promise.all([
-      fetchUserStocks(),
-      //fetchPortfolioSummary(),
-    ]);
-    setLoading(false);
-    message.success('投资组合数据已刷新');
-  }, [fetchUserStocks, fetchPortfolioSummary]);
+    try {
+      const [stocks, summary, comparison] = await Promise.all([
+        fetchUserStocks(),
+        fetchPortfolioSummary(),
+        fetchDataForPeriod(),
+      ]);
+
+      // 更新对比数据
+      setComparisonData(comparison || []);
+
+    } catch (error) {
+      console.error('刷新数据失败:', error);
+    } finally {
+      setLoading(false);
+    }
+  }, [fetchUserStocks, fetchPortfolioSummary, fetchDataForPeriod]);
 
   // 初始化数据 - 组件挂载时执行
   useEffect(() => {
@@ -889,10 +1232,7 @@ const PortfolioPage: React.FC<PortfolioPageProps> = ({ onRefresh }) => {
       try {
         console.log('Portfolio: 初始化数据开始');
         setLoading(true);
-        await Promise.all([
-          fetchUserStocks(),
-          fetchPortfolioSummary(),
-        ]);
+        await refreshAllData();  // 直接调用
         console.log('Portfolio: 初始化数据完成');
       } catch (error) {
         console.error('Portfolio: 初始化失败:', error);
@@ -900,10 +1240,8 @@ const PortfolioPage: React.FC<PortfolioPageProps> = ({ onRefresh }) => {
         setLoading(false);
       }
     };
-
     initializeData();
-  }, [fetchUserStocks, fetchPortfolioSummary]);
-
+  }, []);  // 空数组
   // 监听全局刷新事件 - 独立管理事件监听
   useEffect(() => {
     const handleGlobalRefresh = (event: CustomEvent) => {
@@ -1015,24 +1353,24 @@ const PortfolioPage: React.FC<PortfolioPageProps> = ({ onRefresh }) => {
             </Button>
 
             {/* 删除按钮 */}
-            <Button
-              type="text"
-              size="small"
-              danger
-              icon={<DeleteOutlined />}
-              onClick={(e) => {
-                e.stopPropagation(); // 防止触发行点击事件
-                console.log('删除交易 - ID:', record.id);
-                Modal.confirm({
-                  title: '确认删除',
-                  content: `确定要删除 ${parentStock.symbol} 在 ${record.execution.date} 的交易记录吗？`,
-                  okText: '删除',
-                  okType: 'danger',
-                  cancelText: '取消',
-                  onOk: () => handleDeleteTransaction(record.id), // 直接使用 record.id
-                });
-              }}
-            />
+            {/*<Button*/}
+            {/*  type="text"*/}
+            {/*  size="small"*/}
+            {/*  danger*/}
+            {/*  icon={<DeleteOutlined />}*/}
+            {/*  onClick={(e) => {*/}
+            {/*    e.stopPropagation(); // 防止触发行点击事件*/}
+            {/*    console.log('删除交易 - ID:', record.id);*/}
+            {/*    Modal.confirm({*/}
+            {/*      title: '确认删除',*/}
+            {/*      content: `确定要删除 ${parentStock.symbol} 在 ${record.execution.date} 的交易记录吗？`,*/}
+            {/*      okText: '删除',*/}
+            {/*      okType: 'danger',*/}
+            {/*      cancelText: '取消',*/}
+            {/*      onOk: () => handleDeleteTransaction(record.id), // 直接使用 record.id*/}
+            {/*    });*/}
+            {/*  }}*/}
+            {/*/>*/}
           </Space>
         ),
       },
@@ -1068,7 +1406,8 @@ const PortfolioPage: React.FC<PortfolioPageProps> = ({ onRefresh }) => {
       dataIndex: 'price',
       width: 120,
       render: (_: any, record: UserStock) => {
-        return formatPrice(Math.abs(record.stock.market.price))
+        const price = record?.position?.price ?? 0
+        return formatPrice(Math.abs(price))
       },
     },
     {
@@ -1083,7 +1422,7 @@ const PortfolioPage: React.FC<PortfolioPageProps> = ({ onRefresh }) => {
       key: 'dailyProfit',
       width: 120,
       render: (_: any, record: UserStock) => {
-        const dailyProfit = record.performance.returns["1D"];
+        const dailyProfit = record.performance?.returns["1D"];
         const isPositive = dailyProfit >= 0;
         return (
           <span style={{ color: isPositive ? '#52c41a' : '#ff4d4f' }}>
@@ -1097,7 +1436,7 @@ const PortfolioPage: React.FC<PortfolioPageProps> = ({ onRefresh }) => {
       key: 'weekPercent',
       width: 120,
       render: (_: any, record: UserStock) => {
-        const tmpProfit = record.performance.returns["1W"];
+        const tmpProfit = record.performance?.returns["1W"];
         const isPositive = tmpProfit >= 0;
         return (
           <span style={{ color: isPositive ? '#52c41a' : '#ff4d4f' }}>
@@ -1111,7 +1450,7 @@ const PortfolioPage: React.FC<PortfolioPageProps> = ({ onRefresh }) => {
       key: 'monthPercent',
       width: 120,
       render: (_: any, record: UserStock) => {
-        const tmpProfit = record.performance.returns["1M"];
+        const tmpProfit = record.performance?.returns["1M"];
         const isPositive = tmpProfit >= 0;
         return (
           <span style={{ color: isPositive ? '#52c41a' : '#ff4d4f' }}>
@@ -1125,7 +1464,7 @@ const PortfolioPage: React.FC<PortfolioPageProps> = ({ onRefresh }) => {
       key: 'totalPercent',
       width: 120,
       render: (_: any, record: UserStock) => {
-        const tmpProfit = record.performance.returns.sinceInception;
+        const tmpProfit = record.performance?.returns.sinceInception;
         const isPositive = tmpProfit >= 0;
         return (
           <span style={{ color: isPositive ? '#52c41a' : '#ff4d4f' }}>
@@ -1139,8 +1478,8 @@ const PortfolioPage: React.FC<PortfolioPageProps> = ({ onRefresh }) => {
       key: 'totalProfit',
       width: 120,
       render: (_: any, record: UserStock) => (
-        <span style={{ color: (record.position.currentValue || 0) >= 0 ? '#52c41a' : '#ff4d4f' }}>
-          {formatPrice(record.position.currentValue || 0)} ({(record.position.weight * 100 || 0).toFixed(2)}%)
+        <span style={{ color: (record.position?.currentValue || 0) >= 0 ? '#52c41a' : '#ff4d4f' }}>
+          {formatPrice(record.position?.currentValue || 0)} ({(record.position?.weight * 100 || 0).toFixed(2)}%)
         </span>
       ),
     },
@@ -1167,7 +1506,7 @@ const PortfolioPage: React.FC<PortfolioPageProps> = ({ onRefresh }) => {
             label: '删除',
             icon: <DeleteOutlined />,
             danger: true,
-            onClick: () => handleDeleteTransaction(record.id),
+            onClick: () => handleDeleteTransaction(record.id, record.symbol),
           },
         ];
 
@@ -1183,25 +1522,44 @@ const PortfolioPage: React.FC<PortfolioPageProps> = ({ onRefresh }) => {
     },
   ];
 
-  // 生成投资组合数据 #TO DO 重新组合
+  // 生成投资组合数据
   const generatePortfolioData = () => {
-    return userStocks.map(stock => ({
-      symbol: stock.symbol,
-      profitLossPercent: stock.position.averageCost || 0,
-      currentValue: stock.position.averageCost|| 0,
-      investment: stock.position.averageCost || 0,
-      weight: stock.position.weight || 0,
-    }));
+    return userStocks.map(stock => {
+      // 检查数据结构是否存在
+      if (!stock || !stock.position) {
+        console.warn('股票数据结构不完整:', stock);
+        return {
+          symbol: stock?.symbol || 'Unknown',
+          profitLossPercent: 0,
+          currentValue: 0,
+          investment: 0,
+          weight: 0,
+        };
+      }
+
+      return {
+        symbol: stock.symbol,
+        profitLossPercent: stock.performance?.returns?.sinceInception || 0,
+        currentValue: stock.position.currentValue || 0,
+        investment: stock.position.averageCost || 0,  // 注意字段名
+        weight: stock.position.weight || 0,
+      };
+    });
   };
 
   // 生成饼图数据
-  const generatePieData = () => {
-    return userStocks.map((stock, index) => ({
-      name: stock.symbol,
-      value: stock.position.weight || 0,
-      color: COLORS[index % COLORS.length],
-    }));
-  };
+   const generatePieData = () => {
+      // 过滤掉无效数据
+      const validStocks = userStocks.filter(stock =>
+        stock && stock.position && typeof stock.position.weight === 'number'
+      );
+
+      return validStocks.map((stock, index) => ({
+        name: stock.symbol,
+        value: stock.position.weight || 0,
+        color: COLORS[index % COLORS.length],
+      }));
+    };
 
   if (loading) {
     return (
@@ -1227,7 +1585,7 @@ const PortfolioPage: React.FC<PortfolioPageProps> = ({ onRefresh }) => {
             <Card>
               <Statistic
                 title="初始金额"
-                value={portfolioSummary.overview.totalValue}
+                value={portfolioSummary.overview.totalCost}
                 precision={2}
                 prefix={<DollarOutlined />}
                 valueStyle={{ color: '#1890ff' }}
@@ -1249,7 +1607,7 @@ const PortfolioPage: React.FC<PortfolioPageProps> = ({ onRefresh }) => {
             <Card>
               <Statistic
                 title="持仓盈亏"
-                value={portfolioSummary.overview.dividendIncome}
+                value={portfolioSummary.performance.totalGainLoss}
                 precision={2}
                 valueStyle={{ color: '#1890ff' }}
                 prefix={<DollarOutlined />}
@@ -1259,15 +1617,15 @@ const PortfolioPage: React.FC<PortfolioPageProps> = ({ onRefresh }) => {
           <Col xs={24} sm={6}>
             <Card>
               <Statistic
-                title="实现盈亏"
-                value={portfolioSummary.overview.realizedPnL}
+                title="总盈亏比"
+                value={portfolioSummary.performance.totalGainLossPercent}
                 precision={2}
                 suffix="%"
                 valueStyle={{
-                  color: portfolioSummary.overview.realizedPnL >= 0 ? '#52c41a' : '#ff4d4f'
+                  color: portfolioSummary.performance.totalGainLossPercent >= 0 ? '#52c41a' : '#ff4d4f'
                 }}
                 prefix={
-                  portfolioSummary.overview.realizedPnL >= 0 ? <RiseOutlined /> : <FallOutlined />
+                  portfolioSummary.performance.totalGainLossPercent >= 0 ? <RiseOutlined /> : <FallOutlined />
                 }
               />
             </Card>
@@ -1275,33 +1633,159 @@ const PortfolioPage: React.FC<PortfolioPageProps> = ({ onRefresh }) => {
         </Row>
       )}
 
-      {/* 股票搜索 */}
-      <StockSearchComponent />
-      {/*<Card style={{ marginBottom: '24px' }}>*/}
-      {/*  <Title level={5}>添加新股票</Title>*/}
-      {/*  <AutoComplete*/}
-      {/*    style={{ width: '100%', maxWidth: '400px' }}*/}
-      {/*    onSearch={handleSearch}*/}
-      {/*    onSelect={(value) => handleAddStock(value)}*/}
-      {/*    notFoundContent={searchLoading ? <Spin size="small" /> : null}*/}
-      {/*    options={searchResults.map(result => ({*/}
-      {/*      value: result.symbol,*/}
-      {/*      label: `${result.symbol} - ${result.name}`,*/}
-      {/*    }))}*/}
-      {/*  >*/}
-      {/*    <Input*/}
-      {/*      prefix={<SearchOutlined />}*/}
-      {/*      placeholder="输入股票代码或公司名称搜索..."*/}
-      {/*      size="large"*/}
-      {/*    />*/}
-      {/*  </AutoComplete>*/}
-      {/*</Card>*/}
+      {/* 新增：收益率对比图表 */}
+      <PortfolioComparisonChart
+        comparisonData={comparisonData}
+        selectedPeriod={selectedPeriod}
+        setSelectedPeriod={setSelectedPeriod}
+        customDateRange={customDateRange}
+        setCustomDateRange={setCustomDateRange}
+        onPeriodChange={fetchDataForPeriod}
+        TIME_PERIODS={TIME_PERIODS}
+      />
 
+      {/* 股票搜索弹窗 */}
+      <Modal
+        title="添加新股票"
+        open={searchModalVisible}
+        onCancel={() => {
+          setSearchModalVisible(false);
+          setSearchResults([]);
+          setSearchValue('');
+        }}
+        footer={null}
+        width={600}
+      >
+        <div style={{ marginBottom: '16px' }}>
+          <Text type="secondary">
+            搜索股票代码或公司名称，选择后即可添加到您的投资组合
+          </Text>
+        </div>
+
+        <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start', marginBottom: '16px' }}>
+          <AutoComplete
+            value={searchValue}
+            style={{ flex: 1 }}
+            onSearch={handleSearch}
+            onChange={setSearchValue}
+            onSelect={(value) => {
+              console.log('选择添加股票:', value);
+              handleAddStock(value);
+            }}
+            notFoundContent={
+              searchLoading ? (
+                <div style={{ textAlign: 'center', padding: '12px' }}>
+                  <Spin size="small" />
+                  <div style={{ marginTop: '8px' }}>搜索中...</div>
+                </div>
+              ) : searchValue.trim() ? (
+                <div style={{ textAlign: 'center', padding: '12px', color: '#999' }}>
+                  未找到相关股票
+                </div>
+              ) : null
+            }
+            options={searchResults.map(result => ({
+              value: result.symbol,
+              label: (
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 0' }}>
+                  <div>
+                    <div>
+                      <span style={{ fontWeight: 'bold', color: '#1890ff', fontSize: '14px' }}>
+                        {result.symbol}
+                      </span>
+                      <Tag color="blue" style={{ fontSize: '10px', marginLeft: '8px' }}>
+                        {result.type}
+                      </Tag>
+                    </div>
+                    <div style={{ color: '#666', fontSize: '12px', marginTop: '2px' }}>
+                      {result.name}
+                    </div>
+                  </div>
+                  <Button type="link" size="small" style={{ padding: 0 }}>
+                    添加 →
+                  </Button>
+                </div>
+              ),
+            }))}
+            filterOption={false}
+            placeholder="输入股票代码（如 AAPL）或公司名称..."
+            size="large"
+            allowClear
+          />
+
+          <Button
+            type="primary"
+            size="large"
+            onClick={() => {
+              if (searchValue.trim() && /^[A-Z]{1,5}$/.test(searchValue.trim().toUpperCase())) {
+                handleAddStock(searchValue.trim().toUpperCase());
+              } else {
+                message.warning('请输入有效的股票代码（1-5个字母）');
+              }
+            }}
+            disabled={!searchValue.trim()}
+            style={{ minWidth: '80px' }}
+          >
+            添加
+          </Button>
+        </div>
+
+        {/* 搜索结果统计 */}
+        {searchResults.length > 0 && (
+          <div style={{
+            padding: '8px 12px',
+            backgroundColor: '#f6ffed',
+            border: '1px solid #b7eb8f',
+            borderRadius: '4px',
+            marginBottom: '16px'
+          }}>
+            <Text type="secondary" style={{ fontSize: '12px' }}>
+              找到 {searchResults.length} 个结果，点击任意选项即可添加到投资组合
+            </Text>
+          </div>
+        )}
+
+        {/* 热门股票推荐 */}
+        {searchResults.length === 0 && !searchLoading && !searchValue.trim() && (
+          <div>
+            <div style={{ marginBottom: '12px' }}>
+              <Text strong>热门股票推荐</Text>
+            </div>
+            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+              {['AAPL', 'GOOGL', 'MSFT', 'TSLA', 'AMZN', 'NVDA', 'META', 'NFLX'].map(symbol => (
+                <Button
+                  key={symbol}
+                  size="small"
+                  onClick={() => handleAddStock(symbol)}
+                  style={{ marginBottom: '8px' }}
+                >
+                  {symbol}
+                </Button>
+              ))}
+            </div>
+            <Text type="secondary" style={{ fontSize: '12px' }}>
+              点击快速添加，或使用上方搜索框查找其他股票
+            </Text>
+          </div>
+        )}
+
+        {/* 操作提示 */}
+        <div style={{
+          marginTop: '16px',
+          padding: '12px',
+          backgroundColor: '#f0f0f0',
+          borderRadius: '4px'
+        }}>
+          <Text type="secondary" style={{ fontSize: '12px' }}>
+            💡 提示：添加股票后，您可以在持仓列表中记录买入交易，系统将自动计算收益和统计数据
+          </Text>
+        </div>
+      </Modal>
       <Row gutter={[16, 16]}>
         {/* 股票列表 */}
         <Col xs={24} xl={16}>
           <Card
-            title="持仓股票"
+              title="持仓股票"
             extra={
               <Space>
                 <Dropdown
@@ -1324,6 +1808,7 @@ const PortfolioPage: React.FC<PortfolioPageProps> = ({ onRefresh }) => {
                   trigger={['click']}
                 >
                   <Button type="text" size="small">
+                    <SwapOutlined style={{ marginRight: 4 }} />
                     {getSortDisplayText()} <DownOutlined />
                   </Button>
                 </Dropdown>
@@ -1332,15 +1817,16 @@ const PortfolioPage: React.FC<PortfolioPageProps> = ({ onRefresh }) => {
                   size="small"
                   onClick={() => setVisualizationVisible(true)}
                 >
+                  <LineChartOutlined  />
                   可视化
                 </Button>
                 <Button
                   type="primary"
                   size="small"
                   icon={<PlusOutlined />}
-                  onClick={refreshAllData}
+                  onClick={() => setSearchModalVisible(true)}
                 >
-                  刷新数据
+                  投资
                 </Button>
               </Space>
             }
@@ -1573,7 +2059,7 @@ const PortfolioPage: React.FC<PortfolioPageProps> = ({ onRefresh }) => {
               <div>
                 <Text strong>当前价格：</Text>
                 <Text style={{ fontSize: '18px', fontWeight: 'bold' }}>
-                  {formatPrice(selectedStock.stock.market.price)}
+                  {formatPrice(selectedStock.position.price)}
                 </Text>
               </div>
               <div>
