@@ -243,20 +243,20 @@ const PortfolioPage: React.FC<PortfolioPageProps> = ({ onRefresh }) => {
   // 生成热力图数据
   const generateHeatmapData = () => {
     const validStocks = userStocks.filter(stock =>
-      stock && stock.position && stock.performance && stock.stock
+        stock?.position && stock?.performance && stock?.stock
     );
 
     if (!userStocks.length) return [];
 
     // 计算总投资价值用于相对大小
-    const maxValue = Math.max(...userStocks.map(stock => stock.position.weight || 0));
-    const minValue = Math.min(...userStocks.map(stock => stock.position.weight || 0));
+    const maxValue = Math.max(...userStocks.map(stock => stock.position.currentValue|| 0));
+    const minValue = Math.min(...userStocks.map(stock => stock.position.currentValue || 0));
     const valueRange = maxValue - minValue;
 
     return userStocks.map(stock => {
-      const currentValue = stock.position.weight || 0;
-      const profitPercent = stock.performance.pnl.totalPercent || 0;
-      const dailyChange = stock.stock.market.changePercent || 0;
+      const currentValue = stock.position.currentValue || 0;
+      const profitPercent = stock.performance.pnl.totalPercent|| 0;
+      const dailyChange = stock.performance.returns["1D"] || 0;
 
       // 计算相对大小 (20% - 100%)
       const sizeRatio = valueRange > 0
@@ -1401,13 +1401,17 @@ const PortfolioPage: React.FC<PortfolioPageProps> = ({ onRefresh }) => {
         </Tag>
       ),
     },
-    {
+   {
       title: '价格',
       dataIndex: 'price',
       width: 120,
       render: (_: any, record: UserStock) => {
         const price = record?.position?.price ?? 0
-        return formatPrice(Math.abs(price))
+        const avgPrice = record?.position?.averageCost ?? null
+        const priceStr = formatPrice(Math.abs(price))
+        return avgPrice
+          ? `${priceStr} (${formatPrice(Math.abs(avgPrice))})`
+          : priceStr
       },
     },
     {
