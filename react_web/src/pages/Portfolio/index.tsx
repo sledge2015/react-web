@@ -37,6 +37,8 @@ import {
   MoreOutlined,
   SwapOutlined,
   LineChartOutlined,
+  InfoCircleOutlined,
+  CalendarOutlined,
   ShoppingCartOutlined,
 } from '@ant-design/icons';
 import {
@@ -1582,71 +1584,263 @@ const PortfolioPage: React.FC<PortfolioPageProps> = ({ onRefresh }) => {
 
   return (
     <div style={{ padding: '24px' }}>
-      {/* 投资组合汇总 */}
+    {/* 投资组合汇总 */}
       {portfolioSummary && (
-        <Row gutter={[16, 16]} style={{ marginBottom: '24px' }}>
-          <Col xs={24} sm={6}>
-            <Card>
-              <Statistic
-                title="初始金额"
-                value={portfolioSummary.overview.totalCost}
-                precision={2}
-                prefix={<DollarOutlined />}
-                valueStyle={{ color: '#1890ff' }}
-              />
+        <Row gutter={[8, 16]} style={{ marginBottom: '24px', width: '100%' }}>
+          <Col flex="1">
+            <Card
+              style={{
+                border: 'none',
+                borderRadius: '8px',
+                padding: '12px',
+                margin: '0 4px',
+                display: 'flex',
+                flexDirection: 'column',
+                height: '140px'
+              }}
+              bodyStyle={{ padding: 0, display: 'flex', flexDirection: 'column', justifyContent: 'space-between', height: '100%' }}
+            >
+              {/* 上半部分：累计收益率 */}
+              <div style={{ textAlign: 'left' }}>
+                <div style={{ fontSize: '14px', color: '#666', marginBottom: '4px' }}>
+                  累计收益率：
+                </div>
+                <div style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center'
+                }}>
+                  <RiseOutlined style={{ fontSize: '14px', color: '#52c41a', marginRight: '4px' }} />
+                  <span style={{ fontSize: '32px', fontWeight: 'bold', color: '#52c41a' }}>
+                    {Number(portfolioSummary.performance.returns.sinceInception).toFixed(2)}%
+                  </span>
+                </div>
+              </div>
+
+              {/* 下半部分：投入资金 / 持仓市值 */}
+              <div style={{
+                fontSize: '12px',
+                color: '#221616',
+                display: 'flex',
+                justifyContent: 'space-between',
+                marginTop: '8px' // 控制与上半部分间距
+              }}>
+                <span>投入资金：${portfolioSummary.overview.totalCost}</span>
+                <span>持仓市值：${portfolioSummary.overview.totalValue}</span>
+              </div>
             </Card>
           </Col>
-          <Col xs={24} sm={6}>
-            <Card>
-              <Statistic
-                title="持仓市值"
-                value={portfolioSummary.overview.equityValue}
-                precision={2}
-                prefix={<DollarOutlined />}
-                valueStyle={{ color: '#1890ff' }}
-              />
+
+          <Col flex="1">
+            <Card
+              style={{
+                border: 'none',
+                borderRadius: '8px',
+                padding: '12px',
+                margin: '0 4px',
+                display: 'flex',
+                flexDirection: 'column',
+                height: '140px'
+              }}
+              bodyStyle={{ padding: 0, height: '100%' }}
+            >
+              <div style={{ fontSize: '14px', color: '#666', marginBottom: '4px' }}>
+                年化收益率：
+              </div>
+              <div style={{
+                textAlign: 'center',
+                margin: '8px 0',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center'
+              }}>
+                <FallOutlined style={{ fontSize: '14px', color: '#ff4d4f', marginRight: '4px' }} />
+                <span style={{ fontSize: '32px', fontWeight: 'bold', color: '#ff4d4f' }}>
+                  {Number(portfolioSummary.performance.returns.annualized).toFixed(2)}%
+                </span>
+              </div>
+              <div style={{
+                fontSize: '12px',
+                color: '#221616',
+                display: 'flex',
+                justifyContent: 'space-between'
+              }}>
+                <span>总盈亏：${portfolioSummary.performance.totalGainLoss}</span>
+                <span>总盈亏百分比：{Number(portfolioSummary.performance.totalGainLossPercent).toFixed(2)}%</span>
+              </div>
             </Card>
           </Col>
-          <Col xs={24} sm={6}>
-            <Card>
-              <Statistic
-                title="持仓盈亏"
-                value={portfolioSummary.performance.totalGainLoss}
-                precision={2}
-                valueStyle={{ color: '#1890ff' }}
-                prefix={<DollarOutlined />}
-              />
+
+          <Col flex="1">
+            <Card
+              style={{
+                border: 'none',
+                borderRadius: '8px',
+                padding: '12px',
+                margin: '0 4px',
+                display: 'flex',
+                flexDirection: 'column',
+                height: '140px'
+              }}
+              bodyStyle={{ padding: 0, height: '100%' }}
+            >
+              <div style={{ fontSize: '14px', color: '#666', marginBottom: '4px' }}>
+                夏普比率：
+              </div>
+              <div style={{
+                textAlign: 'center',
+                margin: '8px 0',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center'
+              }}>
+                <SearchOutlined style={{ fontSize: '14px', color: '#1890ff', marginRight: '4px' }} />
+                <span style={{ fontSize: '32px', fontWeight: 'bold', color: '#1890ff' }}>
+                  {portfolioSummary.performance.sharpe}
+                </span>
+              </div>
+              <div style={{
+                fontSize: '12px',
+                color: '#221616',
+                display: 'flex',
+                justifyContent: 'space-between'
+              }}>
+                <span>索提诺：{Number(portfolioSummary.performance.sortino).toFixed(4)}</span>
+                <span>Beta系数：{Number(portfolioSummary.performance.beta).toFixed(4)}</span>
+              </div>
             </Card>
           </Col>
-          <Col xs={24} sm={6}>
-            <Card>
-              <Statistic
-                title="总盈亏比"
-                value={portfolioSummary.performance.totalGainLossPercent}
-                precision={2}
-                suffix="%"
-                valueStyle={{
-                  color: portfolioSummary.performance.totalGainLossPercent >= 0 ? '#52c41a' : '#ff4d4f'
-                }}
-                prefix={
-                  portfolioSummary.performance.totalGainLossPercent >= 0 ? <RiseOutlined /> : <FallOutlined />
-                }
-              />
+
+          <Col flex="1">
+            <Card
+              style={{
+                border: 'none',
+                borderRadius: '8px',
+                padding: '12px',
+                margin: '0 4px',
+                display: 'flex',
+                flexDirection: 'column',
+                height: '140px'
+              }}
+              bodyStyle={{ padding: 0, height: '100%' }}
+            >
+              <div style={{ fontSize: '14px', color: '#666', marginBottom: '4px' }}>
+                最大回撤：
+              </div>
+              <div style={{
+                textAlign: 'center',
+                margin: '8px 0',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center'
+              }}>
+                <FallOutlined style={{ fontSize: '14px', color: '#ff4d4f', marginRight: '4px' }} />
+                <span style={{
+                  fontSize: '32px',
+                  fontWeight: 'bold',
+                  color: portfolioSummary.performance.drawdown.maxDrawdown >= 0 ? '#52c41a' : '#ff4d4f'
+                }}>
+                  {portfolioSummary.performance.drawdown.maxDrawdown}%
+                </span>
+              </div>
+              <div style={{
+                fontSize: '12px',
+                color: '#221616',
+                display: 'flex',
+                justifyContent: 'space-between'
+              }}>
+                <span>回撤持续时间：{portfolioSummary.performance.drawdown.drawdowndurationdays}</span>
+                <span>
+                  回撤恢复时间：
+                  {portfolioSummary.performance.drawdown.recoverydate
+                    ? new Date(portfolioSummary.performance.drawdown.recoverydate).toLocaleDateString('zh-CN', {
+                        year: 'numeric',
+                        month: '2-digit',
+                        day: '2-digit'
+                      }).replace(/-/g, '/')
+                    : '未恢复'
+                  }
+                </span>
+              </div>
+            </Card>
+          </Col>
+
+          <Col flex="1">
+            <Card
+              style={{
+                border: 'none',
+                borderRadius: '8px',
+                padding: '12px',
+                margin: '0 4px',
+                display: 'flex',
+                flexDirection: 'column',
+                height: '140px'
+              }}
+              bodyStyle={{ padding: 0, height: '100%' }}
+            >
+              <div style={{ fontSize: '14px', color: '#666', marginBottom: '4px' }}>
+                波动率：
+              </div>
+              <div style={{
+                textAlign: 'center',
+                margin: '8px 0',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center'
+              }}>
+                <LineChartOutlined style={{ fontSize: '14px', color: '#52c41a', marginRight: '4px' }} />
+                <span style={{ fontSize: '32px', fontWeight: 'bold', color: '#52c41a' }}>
+                  {portfolioSummary.performance.volatility}%
+                </span>
+              </div>
+              <div style={{
+                fontSize: '12px',
+                color: '#221616',
+                display: 'flex',
+                justifyContent: 'space-between'
+              }}>
+                <span>赫芬达尔指数：{Number(portfolioSummary.composition.herfindahlIndex).toFixed(2)}</span>
+                <span>有效股票数量：{Number(portfolioSummary.composition.effectiveStocks).toFixed(2)} </span>
+              </div>
             </Card>
           </Col>
         </Row>
       )}
 
-      {/* 新增：收益率对比图表 */}
-      <PortfolioComparisonChart
-        comparisonData={comparisonData}
-        selectedPeriod={selectedPeriod}
-        setSelectedPeriod={setSelectedPeriod}
-        customDateRange={customDateRange}
-        setCustomDateRange={setCustomDateRange}
-        onPeriodChange={fetchDataForPeriod}
-        TIME_PERIODS={TIME_PERIODS}
-      />
+      <Row gutter={[16, 16]} style={{ marginBottom: '24px' }}>
+        {/* 收益率对比图表 */}
+        <Col xs={24} md={24} lg={16} xl={16}>
+          <PortfolioComparisonChart
+            comparisonData={comparisonData}
+            selectedPeriod={selectedPeriod}
+            setSelectedPeriod={setSelectedPeriod}
+            customDateRange={customDateRange}
+            setCustomDateRange={setCustomDateRange}
+            onPeriodChange={fetchDataForPeriod}
+            TIME_PERIODS={TIME_PERIODS}
+          />
+        </Col>
+
+        {/* 雷达图 */}
+        <Col xs={24} md={24} lg={8} xl={8}>
+          <Card
+            title="投资风格雷达"
+            extra={
+              <Tooltip title="基于历史数据分析的投资风格特征">
+                <InfoCircleOutlined style={{ color: '#8c8c8c' }} />
+              </Tooltip>
+            }
+            style={{
+              height: '100%',
+              borderRadius: '12px',
+              boxShadow: '0 4px 12px rgba(0,0,0,0.08)'
+            }}
+            bodyStyle={{ padding: '20px' }}
+          >
+            <div id="styleRadarChart" style={{ height: '380px' }}></div>
+          </Card>
+        </Col>
+      </Row>
 
       {/* 股票搜索弹窗 */}
       <Modal
@@ -1903,9 +2097,10 @@ const PortfolioPage: React.FC<PortfolioPageProps> = ({ onRefresh }) => {
                       cx="50%"
                       cy="50%"
                       labelLine={false}
-                      label={({ name, percent }) =>
-                        `${name} ${((percent ?? 0) * 100).toFixed(0)}%`
-                      }
+                     label={(props: any) => {
+                        const { name, percent } = props;
+                        return `${name} ${((percent ?? 0) * 100).toFixed(0)}%`;
+                      }}
                       outerRadius={60}
                       fill="#8884d8"
                       dataKey="value"
