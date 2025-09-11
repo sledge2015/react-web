@@ -54,6 +54,11 @@ import {
   Cell,
   Legend,
   Treemap,
+  RadarChart,        // 雷达图容器
+  PolarGrid,         // 极坐标网格
+  PolarAngleAxis,    // 角度轴（显示维度名称）
+  PolarRadiusAxis,   // 径向轴（显示数值）
+  Radar,             // 雷达区域
   LineChart,    // 新增
   Line,         // 新增
   ReferenceLine, // 新增
@@ -941,17 +946,23 @@ const PortfolioPage: React.FC<PortfolioPageProps> = ({ onRefresh }) => {
     const nasdaqReturn = parseFloat(latestData.nasdaq);
 
     return (
-      <Card style={{ marginBottom: '24px' }}>
-
+      <Card style={{ marginBottom: '24px' }}
+            title="投资组合收益时序图"
+            extra={
+              <Tooltip title="计算并可视化一个投资组合从开始到结束的累计收益">
+                <InfoCircleOutlined style={{ color: '#8c8c8c' }} />
+              </Tooltip>
+            }
+      >
         {/* 时间段选择器 */}
         <div style={{
           display: 'flex',
           justifyContent: 'space-between',
           alignItems: 'center',
           padding: '12px 16px',
-          backgroundColor: '#fafafa',
-          borderRadius: '6px',
-          border: '1px solid #f0f0f0',
+          // backgroundColor: '#fafafa',
+          // borderRadius: '6px',
+          // border: '1px solid #f0f0f0',
           marginBottom: '16px'
         }}>
           <div>
@@ -1064,7 +1075,7 @@ const PortfolioPage: React.FC<PortfolioPageProps> = ({ onRefresh }) => {
               stroke="#1890ff"
               strokeWidth={3}
               fill="url(#portfolioGradient)"
-              name="我的投资组合"
+              name="投资组合"
               dot={false}
               activeDot={{ r: 6, stroke: '#1890ff', strokeWidth: 2 }}
             />
@@ -1098,112 +1109,112 @@ const PortfolioPage: React.FC<PortfolioPageProps> = ({ onRefresh }) => {
           </AreaChart>
         </ResponsiveContainer>
 
-         {/*在图表下方添加*/}
-          <div style={{
-            marginTop: '20px',
-            padding: '20px',
-            backgroundColor: '#fafafa',
-            borderRadius: '8px',
-            border: '1px solid #f0f0f0'
-          }}>
-            <div style={{
-              marginBottom: '16px',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between'
-            }}>
-              <Text strong style={{ fontSize: '14px', color: '#262626' }}>
-                相对表现分析
-              </Text>
-              <Text type="secondary" style={{ fontSize: '12px' }}>
-                基于当前周期收益率
-              </Text>
-            </div>
+         {/*/!*在图表下方添加*!/*/}
+         {/* <div style={{*/}
+         {/*   marginTop: '20px',*/}
+         {/*   padding: '20px',*/}
+         {/*   backgroundColor: '#fafafa',*/}
+         {/*   borderRadius: '8px',*/}
+         {/*   border: '1px solid #f0f0f0'*/}
+         {/* }}>*/}
+         {/*   <div style={{*/}
+         {/*     marginBottom: '16px',*/}
+         {/*     display: 'flex',*/}
+         {/*     alignItems: 'center',*/}
+         {/*     justifyContent: 'space-between'*/}
+         {/*   }}>*/}
+         {/*     <Text strong style={{ fontSize: '14px', color: '#262626' }}>*/}
+         {/*       相对表现分析*/}
+         {/*     </Text>*/}
+         {/*     <Text type="secondary" style={{ fontSize: '12px' }}>*/}
+         {/*       基于当前周期收益率*/}
+         {/*     </Text>*/}
+         {/*   </div>*/}
 
-            <Row gutter={[20, 16]}>
-              <Col span={12}>
-                <div style={{
-                  padding: '16px 20px',
-                  backgroundColor: 'white',
-                  borderRadius: '6px',
-                  border: '1px solid #e8e8e8',
-                  boxShadow: '0 2px 4px rgba(0,0,0,0.02)'
-                }}>
-                  <div style={{
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center'
-                  }}>
-                    <div>
-                      <Text style={{ fontSize: '13px', color: '#8c8c8c' }}>vs 标普500</Text>
-                      <div style={{ fontSize: '10px', color: '#bfbfbf', marginTop: '2px' }}>
-                        相对收益率
-                      </div>
-                    </div>
-                    <div style={{ textAlign: 'right' }}>
-                      <div style={{
-                        fontSize: '20px',
-                        fontWeight: 'bold',
-                        fontFamily: 'monospace',
-                        color: portfolioReturn - sp500Return >= 0 ? '#52c41a' : '#ff4d4f'
-                      }}>
-                        {portfolioReturn - sp500Return >= 0 ? '+' : ''}
-                        {(portfolioReturn - sp500Return).toFixed(2)}%
-                      </div>
-                      <div style={{
-                        fontSize: '10px',
-                        color: portfolioReturn - sp500Return >= 0 ? '#52c41a' : '#ff4d4f',
-                        fontWeight: '500'
-                      }}>
-                        {portfolioReturn - sp500Return >= 0 ? '跑赢指数' : '跑输指数'}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </Col>
+         {/*   <Row gutter={[20, 16]}>*/}
+         {/*     <Col span={12}>*/}
+         {/*       <div style={{*/}
+         {/*         padding: '16px 20px',*/}
+         {/*         backgroundColor: 'white',*/}
+         {/*         borderRadius: '6px',*/}
+         {/*         border: '1px solid #e8e8e8',*/}
+         {/*         boxShadow: '0 2px 4px rgba(0,0,0,0.02)'*/}
+         {/*       }}>*/}
+         {/*         <div style={{*/}
+         {/*           display: 'flex',*/}
+         {/*           justifyContent: 'space-between',*/}
+         {/*           alignItems: 'center'*/}
+         {/*         }}>*/}
+         {/*           <div>*/}
+         {/*             <Text style={{ fontSize: '13px', color: '#8c8c8c' }}>vs 标普500</Text>*/}
+         {/*             <div style={{ fontSize: '10px', color: '#bfbfbf', marginTop: '2px' }}>*/}
+         {/*               相对收益率*/}
+         {/*             </div>*/}
+         {/*           </div>*/}
+         {/*           <div style={{ textAlign: 'right' }}>*/}
+         {/*             <div style={{*/}
+         {/*               fontSize: '20px',*/}
+         {/*               fontWeight: 'bold',*/}
+         {/*               fontFamily: 'monospace',*/}
+         {/*               color: portfolioReturn - sp500Return >= 0 ? '#52c41a' : '#ff4d4f'*/}
+         {/*             }}>*/}
+         {/*               {portfolioReturn - sp500Return >= 0 ? '+' : ''}*/}
+         {/*               {(portfolioReturn - sp500Return).toFixed(2)}%*/}
+         {/*             </div>*/}
+         {/*             <div style={{*/}
+         {/*               fontSize: '10px',*/}
+         {/*               color: portfolioReturn - sp500Return >= 0 ? '#52c41a' : '#ff4d4f',*/}
+         {/*               fontWeight: '500'*/}
+         {/*             }}>*/}
+         {/*               {portfolioReturn - sp500Return >= 0 ? '跑赢指数' : '跑输指数'}*/}
+         {/*             </div>*/}
+         {/*           </div>*/}
+         {/*         </div>*/}
+         {/*       </div>*/}
+         {/*     </Col>*/}
 
-              <Col span={12}>
-                <div style={{
-                  padding: '16px 20px',
-                  backgroundColor: 'white',
-                  borderRadius: '6px',
-                  border: '1px solid #e8e8e8',
-                  boxShadow: '0 2px 4px rgba(0,0,0,0.02)'
-                }}>
-                  <div style={{
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center'
-                  }}>
-                    <div>
-                      <Text style={{ fontSize: '13px', color: '#8c8c8c' }}>vs 纳斯达克</Text>
-                      <div style={{ fontSize: '10px', color: '#bfbfbf', marginTop: '2px' }}>
-                        相对收益率
-                      </div>
-                    </div>
-                    <div style={{ textAlign: 'right' }}>
-                      <div style={{
-                        fontSize: '20px',
-                        fontWeight: 'bold',
-                        fontFamily: 'monospace',
-                        color: portfolioReturn - nasdaqReturn >= 0 ? '#52c41a' : '#ff4d4f'
-                      }}>
-                        {portfolioReturn - nasdaqReturn >= 0 ? '+' : ''}
-                        {(portfolioReturn - nasdaqReturn).toFixed(2)}%
-                      </div>
-                      <div style={{
-                        fontSize: '10px',
-                        color: portfolioReturn - nasdaqReturn >= 0 ? '#52c41a' : '#ff4d4f',
-                        fontWeight: '500'
-                      }}>
-                        {portfolioReturn - nasdaqReturn >= 0 ? '跑赢指数' : '跑输指数'}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </Col>
-            </Row>
-          </div>
+         {/*     <Col span={12}>*/}
+         {/*       <div style={{*/}
+         {/*         padding: '16px 20px',*/}
+         {/*         backgroundColor: 'white',*/}
+         {/*         borderRadius: '6px',*/}
+         {/*         border: '1px solid #e8e8e8',*/}
+         {/*         boxShadow: '0 2px 4px rgba(0,0,0,0.02)'*/}
+         {/*       }}>*/}
+         {/*         <div style={{*/}
+         {/*           display: 'flex',*/}
+         {/*           justifyContent: 'space-between',*/}
+         {/*           alignItems: 'center'*/}
+         {/*         }}>*/}
+         {/*           <div>*/}
+         {/*             <Text style={{ fontSize: '13px', color: '#8c8c8c' }}>vs 纳斯达克</Text>*/}
+         {/*             <div style={{ fontSize: '10px', color: '#bfbfbf', marginTop: '2px' }}>*/}
+         {/*               相对收益率*/}
+         {/*             </div>*/}
+         {/*           </div>*/}
+         {/*           <div style={{ textAlign: 'right' }}>*/}
+         {/*             <div style={{*/}
+         {/*               fontSize: '20px',*/}
+         {/*               fontWeight: 'bold',*/}
+         {/*               fontFamily: 'monospace',*/}
+         {/*               color: portfolioReturn - nasdaqReturn >= 0 ? '#52c41a' : '#ff4d4f'*/}
+         {/*             }}>*/}
+         {/*               {portfolioReturn - nasdaqReturn >= 0 ? '+' : ''}*/}
+         {/*               {(portfolioReturn - nasdaqReturn).toFixed(2)}%*/}
+         {/*             </div>*/}
+         {/*             <div style={{*/}
+         {/*               fontSize: '10px',*/}
+         {/*               color: portfolioReturn - nasdaqReturn >= 0 ? '#52c41a' : '#ff4d4f',*/}
+         {/*               fontWeight: '500'*/}
+         {/*             }}>*/}
+         {/*               {portfolioReturn - nasdaqReturn >= 0 ? '跑赢指数' : '跑输指数'}*/}
+         {/*             </div>*/}
+         {/*           </div>*/}
+         {/*         </div>*/}
+         {/*       </div>*/}
+         {/*     </Col>*/}
+         {/*   </Row>*/}
+         {/* </div>*/}
       </Card>
     );
   };
@@ -1822,22 +1833,221 @@ const PortfolioPage: React.FC<PortfolioPageProps> = ({ onRefresh }) => {
         </Col>
 
         {/* 雷达图 */}
-        <Col xs={24} md={24} lg={8} xl={8}>
+       <Col xs={24} md={24} lg={8} xl={8}>
           <Card
             title="投资风格雷达"
+            style={{
+              height: '95%',
+              borderRadius: '6px',
+              boxShadow: '0 4px 12px rgba(0,0,0,0.08)'
+            }}
             extra={
               <Tooltip title="基于历史数据分析的投资风格特征">
                 <InfoCircleOutlined style={{ color: '#8c8c8c' }} />
               </Tooltip>
             }
-            style={{
-              height: '100%',
-              borderRadius: '12px',
-              boxShadow: '0 4px 12px rgba(0,0,0,0.08)'
-            }}
             bodyStyle={{ padding: '20px' }}
           >
-            <div id="styleRadarChart" style={{ height: '380px' }}></div>
+            {(() => {
+              // 与饼图保持一致的颜色方案
+              const RADAR_COLORS = {
+                momentum: '#1890ff',    // 蓝色 (类似UNH)
+                quality: '#52c41a',     // 绿色 (类似BRK-B)
+                scale: '#faad14',       // 橙色 (类似AMD)
+                profitability: '#f5222d', // 红色 (类似NVDA)
+                growth: '#722ed1',      // 紫色 (类似ORCL)
+                value: '#13c2c2'        // 青色 (类似TSLA)
+              };
+
+              const mockStyleData = {
+                momentum: 75,
+                value: 60,
+                quality: 85,
+                growth: 70,
+                scale: 40,
+                profitability: 90
+              };
+
+              const radarData = [
+                {
+                  subject: '动量',
+                  value: mockStyleData.momentum,
+                  color: RADAR_COLORS.momentum,
+                  percentage: '75%'
+                },
+                {
+                  subject: '质量',
+                  value: mockStyleData.quality,
+                  color: RADAR_COLORS.quality,
+                  percentage: '85%'
+                },
+                {
+                  subject: '规模',
+                  value: mockStyleData.scale,
+                  color: RADAR_COLORS.scale,
+                  percentage: '40%'
+                },
+                {
+                  subject: '红利',
+                  value: mockStyleData.profitability,
+                  color: RADAR_COLORS.profitability,
+                  percentage: '90%'
+                },
+                {
+                  subject: '成长',
+                  value: mockStyleData.growth,
+                  color: RADAR_COLORS.growth,
+                  percentage: '70%'
+                },
+                {
+                  subject: '价值',
+                  value: mockStyleData.value,
+                  color: RADAR_COLORS.value,
+                  percentage: '60%'
+                }
+              ];
+
+              return (
+                <div>
+                  {/* 雷达图 */}
+                  <ResponsiveContainer width="100%" height={280}>
+                    <RadarChart cx="50%" cy="50%" outerRadius="70%" data={radarData}>
+
+                      {/* 简洁的网格 */}
+                      <PolarGrid
+                        stroke="#f0f0f0"
+                        strokeWidth={1}
+                        gridType="polygon"
+                      />
+
+                      {/* 维度标签 - 与饼图标签风格一致 */}
+                      <PolarAngleAxis
+                        dataKey="subject"
+                        tick={{
+                          fontSize: 12,
+                          fill: '#666',
+                          fontWeight: '500'
+                        }}
+                      />
+
+                      {/* 简化的径向轴 */}
+                      <PolarRadiusAxis
+                        angle={90}
+                        domain={[0, 100]}
+                        tick={false}  // 隐藏刻度，保持简洁
+                        axisLine={false}
+                      />
+
+                      {/* 雷达区域 - 使用渐变但保持简洁 */}
+                      <Radar
+                        name="投资风格"
+                        dataKey="value"
+                        stroke="#1890ff"
+                        strokeWidth={2}
+                        fill="rgba(24, 144, 255, 0.1)"
+                        fillOpacity={0.8}
+                        dot={{
+                          fill: '#1890ff',
+                          strokeWidth: 2,
+                          stroke: '#fff',
+                          r: 4
+                        }}
+                      />
+
+                      {/* 简洁的图例 */}
+                      <Legend
+                        verticalAlign="bottom"
+                        height={30}
+                        iconType="circle"
+                        wrapperStyle={{
+                          fontSize: '12px',
+                          color: '#666'
+                        }}
+                      />
+
+                      {/* 工具提示 - 与饼图风格一致 */}
+                      <RechartsTooltip
+                        content={({ active, payload }) => {
+                          if (active && payload && payload.length) {
+                            const data = payload[0].payload;
+                            return (
+                              <div style={{
+                                backgroundColor: 'white',
+                                padding: '8px 12px',
+                                border: '1px solid #d9d9d9',
+                                borderRadius: '6px',
+                                boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+                                fontSize: '12px'
+                              }}>
+                                <div style={{
+                                  fontWeight: 'bold',
+                                  color: data.color || '#1890ff'
+                                }}>
+                                  {data.subject} {data.percentage}
+                                </div>
+                                <div style={{ color: '#666', fontSize: '11px' }}>
+                                  得分: {data.value}/100
+                                </div>
+                              </div>
+                            );
+                          }
+                          return null;
+                        }}
+                      />
+                    </RadarChart>
+                  </ResponsiveContainer>
+
+                  {/* 底部数据标签 - 模仿饼图的标签样式 */}
+                  <div style={{
+                    display: 'flex',
+                    flexWrap: 'wrap',
+                    justifyContent: 'center',
+                    gap: '12px',
+                    marginTop: '16px',
+                    fontSize: '12px'
+                  }}>
+                    {radarData.map((item, index) => (
+                      <div
+                        key={item.subject}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '4px',
+                          color: '#666'
+                        }}
+                      >
+                        <div
+                          style={{
+                            width: '8px',
+                            height: '8px',
+                            borderRadius: '50%',
+                            backgroundColor: item.color
+                          }}
+                        />
+                        <span style={{ fontWeight: '500' }}>
+                          {item.subject} {item.percentage}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* 简洁的分析总结 */}
+                  <div style={{
+                    marginTop: '16px',
+                    padding: '12px',
+                    backgroundColor: '#f8f9fa',
+                    borderRadius: '6px',
+                    textAlign: 'center',
+                    fontSize: '11px',
+                    color: '#666'
+                  }}>
+                    <Text style={{ fontWeight: '500' }}>
+                      最强: 红利(90%) | 最弱: 规模(40%) | 平均: 70分
+                    </Text>
+                  </div>
+                </div>
+              );
+            })()}
           </Card>
         </Col>
       </Row>
