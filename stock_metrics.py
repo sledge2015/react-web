@@ -2,7 +2,7 @@
 import pandas as pd
 from pandas.tseries.offsets import CustomBusinessDay
 from decimal import Decimal
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Union
 import numpy as np
 import pytz
 
@@ -109,15 +109,15 @@ class StockMetrics:
             price_df: pd.DataFrame
             ) -> pd.DataFrame:
         """
-		构建每日持仓表和权重表（向量化）
+        构建每日持仓表和权重表（向量化）
 
-		Parameters:
-		transactions_df: columns=['trade_time', 'stock_symbol', 'quantity', 'price']
-		price_df: columns=['date', 'stock_symbol', 'close']
+        Parameters:
+        transactions_df: columns=['trade_time', 'stock_symbol', 'quantity', 'price']
+        price_df: columns=['datetime', 'stock_symbol', 'close']
 
-		Returns:
-		每日持仓DataFrame
-		"""
+        Returns:
+        每日持仓DataFrame
+        """
         if transactions_df.empty or price_df.empty:
             return pd.DataFrame()
         
@@ -126,7 +126,7 @@ class StockMetrics:
         
         # 预处理时间字段
         transactions_df['trade_time'] = pd.to_datetime(transactions_df['trade_time'])
-        price_df['date'] = pd.to_datetime(price_df['date'])
+        price_df['datetime'] = pd.to_datetime(price_df['datetime'])
         
         # 1️⃣ 累计交易数量
         transactions_df['trade_date'] = transactions_df['trade_time'].dt.floor('D')
@@ -149,7 +149,7 @@ class StockMetrics:
         stocks = daily_qty['stock_symbol'].unique()
         full_index = pd.MultiIndex.from_product(
             [all_dates, stocks],
-            names=['date', 'stock_symbol']
+            names=['datetime', 'stock_symbol']  # 改为datetime
             )
         daily_positions = daily_qty.set_index(['trade_date', 'stock_symbol']).reindex(
             full_index, fill_value=0
@@ -160,14 +160,14 @@ class StockMetrics:
         daily_positions = daily_positions.reset_index()
         
         # 4️⃣ 对齐价格（merge_asof）
-        price_df_sorted = price_df.sort_values('date')
-        daily_positions_sorted = daily_positions.sort_values('date')
+        price_df_sorted = price_df.sort_values('datetime')
+        daily_positions_sorted = daily_positions.sort_values('datetime')
         daily_positions_merged = pd.merge_asof(
             daily_positions_sorted,
             price_df_sorted,
             by='stock_symbol',
-            left_on='date',
-            right_on='date',
+            left_on='datetime',  # 改为datetime
+            right_on='datetime',  # 改为datetime
             direction='backward'
             )
         
@@ -185,11 +185,11 @@ class StockMetrics:
         # 6️⃣ 计算每日总市值与权重
         daily_total_value = (
             daily_positions_merged
-            .groupby('date')['market_value']
+            .groupby('datetime')['market_value']  # 改为datetime
             .sum()
             .rename('total_value')
         )
-        daily_positions_merged = daily_positions_merged.merge(daily_total_value, on='date')
+        daily_positions_merged = daily_positions_merged.merge(daily_total_value, on='datetime')  # 改为datetime
         
         # 避免除零错误
         daily_positions_merged['weight'] = np.where(
@@ -217,7 +217,7 @@ class StockMetrics:
             return pd.Series()
         
         # 计算每日组合总市值
-        daily_value = daily_positions.groupby('date')['market_value'].sum()
+        daily_value = daily_positions.groupby('datetime')['market_value'].sum()
         
         # 计算每日收益率
         daily_return = daily_value.pct_change().fillna(0)
@@ -232,7 +232,7 @@ class StockMetrics:
     def get_portfolio_sharpe_ratio(
             transactions_df: pd.DataFrame,
             price_df: pd.DataFrame,
-            risk_free_rate: float = 0.03,
+            risk_free_rate: Union[float, pd.Series] = 0.03,
             lookback_days: int = 252
             ) -> float:
         """
@@ -246,7 +246,17 @@ class StockMetrics:
             return 0.0
         
         # 计算年化超额收益和夏普比率
-        excess_return = daily_returns - risk_free_rate / 252
+        # 智能处理风险利率类型
+        if isinstance(risk_free_rate, pd.Series):
+            # 输入是每日风险利率序列
+            aligned_risk_free = risk_free_rate.reindex(daily_returns.index, method='ffill').fillna(0)
+            excess_return = daily_returns - aligned_risk_free
+        elif isinstance(risk_free_rate, (int, float)):
+            # 输入是年化风险利率，转换为日利率
+            daily_risk_free_rate = risk_free_rate / 252
+            excess_return = daily_returns - daily_risk_free_rate
+        else:
+            raise ValueError("risk_free_rate must be float or pd.Series")
         
         if excess_return.std() == 0:
             return 0.0
@@ -333,14 +343,13 @@ class StockMetrics:
     @staticmethod
     def get_portfolio_annualized_return(
             transactions_df: pd.DataFrame,
-            price_df: pd.DataFrame,
-            lookback_days: int = 252
+            price_df: pd.DataFrame
             ) -> float:
         """
 		计算组合年化收益率
 		"""
         daily_returns = StockMetrics._get_portfolio_daily_returns(
-            transactions_df, price_df, lookback_days
+            transactions_df, price_df, lookback_days=None
             )
         
         if len(daily_returns) < 50:
@@ -359,7 +368,7 @@ class StockMetrics:
     def get_portfolio_sortino_ratio(
             transactions_df: pd.DataFrame,
             price_df: pd.DataFrame,
-            risk_free_rate: float = 0.03,
+            risk_free_rate: Union[float, pd.Series] = 0.03,
             lookback_days: int = 252
             ) -> float:
         """
@@ -373,7 +382,18 @@ class StockMetrics:
             return 0.0
         
         # 计算年化收益率
-        annual_return = daily_returns.mean() * 252
+        # 智能处理风险利率类型
+        if isinstance(risk_free_rate, pd.Series):
+            # 使用每日风险利率计算年化超额收益
+            aligned_risk_free = risk_free_rate.reindex(daily_returns.index, method='ffill').fillna(0)
+            excess_return = daily_returns - aligned_risk_free
+            annual_excess_return = excess_return.mean() * 252
+        elif isinstance(risk_free_rate, (int, float)):
+            # 使用年化风险利率
+            annual_return = daily_returns.mean() * 252
+            annual_excess_return = annual_return - risk_free_rate
+        else:
+            raise ValueError("risk_free_rate must be float or pd.Series")
         
         # 计算下行波动率（只考虑负收益）
         negative_returns = daily_returns[daily_returns < 0]
@@ -387,20 +407,19 @@ class StockMetrics:
             return 0.0
         
         # 计算索提诺比率
-        sortino_ratio = (annual_return - risk_free_rate) / downside_volatility
+        sortino_ratio = annual_excess_return / downside_volatility
         return round(sortino_ratio, 2)
     
     @staticmethod
     def get_portfolio_cumulative_return(
             transactions_df: pd.DataFrame,
-            price_df: pd.DataFrame,
-            lookback_days: int = 252
+            price_df: pd.DataFrame
             ) -> pd.Series:
         """
 		计算累计收益率序列
 		"""
         daily_returns = StockMetrics._get_portfolio_daily_returns(
-            transactions_df, price_df, lookback_days
+            transactions_df, price_df, lookback_days=None
             )
         
         if daily_returns.empty:
@@ -423,8 +442,8 @@ class StockMetrics:
             )
         
         if lookback_days and not daily_positions.empty:
-            latest_date = daily_positions['date'].max()
+            latest_date = daily_positions['datetime'].max()
             start_date = latest_date - pd.Timedelta(days=lookback_days)
-            daily_positions = daily_positions[daily_positions['date'] >= start_date]
+            daily_positions = daily_positions[daily_positions['datetime'] >= start_date]
         
         return daily_positions
